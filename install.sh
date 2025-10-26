@@ -30,6 +30,11 @@ MODELS_PATH="${MODELS_PATH_DEFAULT}"
 LOCALAI_DIR="/opt/localai"
 COMPOSE_FILE="${LOCALAI_DIR}/docker-compose.yml"
 SERVICE_NAME="localai.service"
+REPAIR_ONLY="false"
+EXISTING_INSTALLATION="false"
+EXISTING_COMPONENTS=()
+PERSISTED_DIRECTORIES=()
+DOCKER_CMD=""
 
 # --------------------------
 # Utils
@@ -41,6 +46,181 @@ die() { err "$*"; exit 1; }
 
 require_cmd() { command -v "$1" >/dev/null 2>&1 || die "Benötigtes Kommando fehlt: $1"; }
 
+join_by() {
+  local delimiter="$1"
+  shift
+  if [[ $# -eq 0 ]]; then
+    printf ''
+    return 0
+  fi
+  local first="$1"
+  shift
+  printf '%s' "${first}"
+  local item
+  for item in "$@"; do
+    printf '%s%s' "${delimiter}" "${item}"
+  done
+}
+
+prompt_yes_no() {
+  local prompt="$1"
+  if [[ ! -t 0 ]]; then
+    return 1
+  fi
+  local response
+  read -r -p "${prompt} [y/N]: " response || return 1
+  case "${response}" in
+    [yY]|[yY][eE][sS]|[jJ]|[jJ][aA]) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+systemd_unit_exists() {
+  [[ -f "/etc/systemd/system/${SERVICE_NAME}" ]] || systemctl list-unit-files "${SERVICE_NAME}" >/dev/null 2>&1
+}
+
+docker_bin() {
+  if [[ -n "${DOCKER_CMD}" ]]; then
+    printf '%s\n' "${DOCKER_CMD}"
+    return
+  fi
+  command -v docker 2>/dev/null || true
+}
+
+docker_container_exists() {
+  local bin
+  bin="$(docker_bin)"
+  [[ -z "${bin}" ]] && return 1
+  local containers
+  containers="$("${bin}" ps -a --format '{{.Names}}' 2>/dev/null || true)"
+  [[ -z "${containers}" ]] && return 1
+  if grep -Fxq "localai" <<<"${containers}"; then
+    return 0
+  fi
+  return 1
+}
+
+backup_file() {
+  local target="$1"
+  [[ ! -f "${target}" ]] && return 0
+  local stamp
+  stamp="$(date +%Y%m%d%H%M%S)"
+  local backup="${target}.${stamp}.bak"
+  sudo cp "${target}" "${backup}"
+  log "Backup erstellt: ${backup}"
+}
+
+stop_localai_service() {
+  if systemd_unit_exists; then
+    log "Stoppe LocalAI systemd Dienst…"
+    sudo systemctl stop "${SERVICE_NAME}" >/dev/null 2>&1 || true
+  fi
+}
+
+stop_localai_containers() {
+  local bin
+  bin="$(docker_bin)"
+  [[ -z "${bin}" ]] && return 0
+  if ! docker_container_exists; then
+    return 0
+  fi
+  log "Stoppe LocalAI Container…"
+  if [[ -d "${LOCALAI_DIR}" ]]; then
+    ( cd "${LOCALAI_DIR}" && "${bin}" compose down --remove-orphans >/dev/null 2>&1 ) || true
+  fi
+  "${bin}" rm -f localai >/dev/null 2>&1 || true
+}
+
+detect_existing_installation() {
+  EXISTING_COMPONENTS=()
+  PERSISTED_DIRECTORIES=()
+  local found="false"
+
+  if [[ -f "${COMPOSE_FILE}" ]]; then
+    EXISTING_COMPONENTS+=("docker-compose.yml")
+    found="true"
+  fi
+
+  if systemd_unit_exists; then
+    EXISTING_COMPONENTS+=("systemd service")
+    found="true"
+  fi
+
+  if docker_container_exists; then
+    EXISTING_COMPONENTS+=("docker container")
+    found="true"
+  fi
+
+  [[ -d "${LOCALAI_DIR}" ]] && PERSISTED_DIRECTORIES+=("${LOCALAI_DIR}")
+  [[ -d "${MODELS_PATH}" ]] && PERSISTED_DIRECTORIES+=("${MODELS_PATH}")
+
+  if [[ "${found}" == "true" ]]; then
+    EXISTING_INSTALLATION="true"
+  else
+    EXISTING_INSTALLATION="false"
+  fi
+}
+
+safe_uninstall() {
+  log "Führe saubere Deinstallation der bestehenden Installation durch…"
+  stop_localai_service
+  stop_localai_containers
+
+  if [[ -f "/etc/systemd/system/${SERVICE_NAME}" ]]; then
+    backup_file "/etc/systemd/system/${SERVICE_NAME}"
+    sudo rm -f "/etc/systemd/system/${SERVICE_NAME}"
+  fi
+
+  if [[ -f "${COMPOSE_FILE}" ]]; then
+    backup_file "${COMPOSE_FILE}"
+    sudo rm -f "${COMPOSE_FILE}"
+  fi
+
+  sudo systemctl disable "${SERVICE_NAME}" >/dev/null 2>&1 || true
+  sudo systemctl daemon-reload
+}
+
+handle_existing_installation() {
+  detect_existing_installation
+
+  if [[ ${#PERSISTED_DIRECTORIES[@]} -gt 0 ]]; then
+    log "Vorhandene Verzeichnisse werden weiterverwendet: $(join_by ', ' "${PERSISTED_DIRECTORIES[@]}")"
+  fi
+
+  if [[ "${EXISTING_INSTALLATION}" != "true" ]]; then
+    if [[ "${REPAIR_ONLY}" == "true" ]]; then
+      warn "Reparaturmodus angefordert, aber keine bestehende Installation gefunden – starte reguläre Installation."
+      REPAIR_ONLY="false"
+    fi
+    return
+  fi
+
+  local components
+  components="$(join_by ', ' "${EXISTING_COMPONENTS[@]}")"
+  warn "Gefundene LocalAI-Artefakte: ${components}"
+
+  if [[ "${REPAIR_ONLY}" == "true" ]]; then
+    log "Reparaturmodus aktiv – stoppe Dienst für Neu-Konfiguration."
+    stop_localai_service
+    stop_localai_containers
+    return
+  fi
+
+  if [[ "${NONINTERACTIVE}" == "true" ]]; then
+    log "Nicht-interaktiver Modus: bestehende Installation wird automatisch ersetzt."
+    safe_uninstall
+    return
+  fi
+
+  if prompt_yes_no "Bestehende Installation gefunden (${components}). Saubere Neuinstallation durchführen?"; then
+    safe_uninstall
+  else
+    log "Überspringe Deinstallation – konfiguriere bestehende Installation neu."
+    stop_localai_service
+    stop_localai_containers
+  fi
+}
+
 # --------------------------
 # Argumente
 # --------------------------
@@ -48,10 +228,13 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --cpu-only) MODE="cpu"; shift ;;
     --non-interactive) NONINTERACTIVE="true"; shift ;;
+    --repair) REPAIR_ONLY="true"; shift ;;
     --models-path) MODELS_PATH="${2:?}"; shift 2 ;;
     *) die "Unbekanntes Argument: $1" ;;
   esac
 done
+
+handle_existing_installation
 
 # --------------------------
 # Checks
@@ -91,6 +274,9 @@ https://download.docker.com/linux/ubuntu ${CODENAME} stable" \
 sudo apt-get update -y
 log "Docker CE + Compose installieren…"
 sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+DOCKER_CMD="$(docker_bin)"
+[[ -z "${DOCKER_CMD}" ]] && die "docker konnte nach der Installation nicht gefunden werden."
 
 # --------------------------
 # Docker-Dienste & Gruppe
@@ -218,7 +404,7 @@ UNIT
 # Start
 # --------------------------
 log "Compose validieren…"
-( cd "${LOCALAI_DIR}" && /usr/bin/docker compose config >/dev/null )
+( cd "${LOCALAI_DIR}" && "${DOCKER_CMD}" compose config >/dev/null )
 
 log "LocalAI Dienst aktivieren & starten…"
 sudo systemctl daemon-reload
@@ -231,7 +417,7 @@ log "Status prüfen…"
 systemctl --no-pager --full status "${SERVICE_NAME}" || true
 
 log "Docker-Container:"
-/usr/bin/docker ps || true
+"${DOCKER_CMD}" ps || true
 
 # Health-Check (kann anfangs noch 'starting' sein)
 log "Warte kurz auf Health-Endpoint…"
