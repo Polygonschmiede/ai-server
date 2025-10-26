@@ -1,10 +1,9 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `install.sh` is the single entrypoint today; keep it focused on orchestration and push helpers into `scripts/` as they grow.
-- Place reusable shell utilities under `scripts/lib/` and source them from callers; keep each helper under ~50 lines.
-- Add new integration or regression suites under `tests/` and store golden assets (docker-compose snapshots, unit files) in `tests/fixtures/`.
-- Configuration templates (`.env.example`, `config/*.yml`) belong at the root; anything produced at runtime must remain ignored in `.gitignore`.
+- Keep orchestration in `install.sh`; move reusable logic into `scripts/` and shared helpers into `scripts/lib/`.
+- House Bats suites in `tests/` and their golden assets in `tests/fixtures/`.
+- Leave templates such as `.env.example` or `config/*.yml` at the repo root and keep generated artifacts gitignored.
 
 ## Build, Test, and Development Commands
 - `bash install.sh --non-interactive --cpu-only` — smoke-test LocalAI provisioning without GPU dependencies or prompts.
@@ -31,3 +30,5 @@
 ## Security & Operations Notes
 - Verify remote downloads with checksums or GPG whenever possible and document source URLs in code comments.
 - Never ship real secrets; rely on `.env.local` (gitignored) or environment variables for overrides and remind operators to rotate credentials.
+- Power management helpers persist state under `/etc/localai-installer/state.env`; rerun `bash install.sh --repair` after manual edits or when toggling `--skip-*` flags.
+- WOL depends on `ethtool` and the managed `wol@.service`; keep edits in the installer so uninstall and reapply stay clean.
