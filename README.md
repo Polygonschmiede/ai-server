@@ -1,6 +1,24 @@
-# LocalAI Installer for Ubuntu
+# AI Server Installer for Ubuntu
 
-Automated installation and configuration script for [LocalAI](https://github.com/go-skynet/LocalAI) on Ubuntu 24.04 with NVIDIA GPU support, Docker Compose orchestration, and intelligent power management.
+Automated installation and configuration scripts for AI model servers on Ubuntu 24.04 with NVIDIA GPU support, Docker Compose orchestration, and intelligent power management.
+
+## Available AI Servers
+
+This repository provides installers for two AI server options:
+
+1. **LocalAI** - Advanced, self-hosted AI inference engine with wide model format support
+2. **Ollama** - Simple, user-friendly LLM server with beautiful web UI (see [OLLAMA.md](OLLAMA.md))
+
+Both servers:
+- Run in Docker containers
+- Support NVIDIA GPU acceleration
+- Provide OpenAI-compatible APIs
+- Work with n8n and other tools
+- Can be installed on the same system
+
+**New to this?** Start with Ollama for the easiest experience. See [OLLAMA.md](OLLAMA.md) for installation and usage.
+
+**Want both?** Install LocalAI first (see below), then run `sudo bash install-ollama.sh`. Use `./ai-server-manager.sh` to switch between them.
 
 ## Features
 
