@@ -9,10 +9,16 @@ User=root
 WorkingDirectory=/opt/ai-server
 
 # Configuration via environment variables
-Environment="WAIT_MINUTES=30"
+# WAIT_MINUTES: Minutes of idle time before suspend
+# CPU_IDLE_THRESHOLD: CPU must be at least this % idle
+# GPU_USAGE_MAX: GPU usage must be below this %
+# CHECK_INTERVAL: How often to check (in seconds)
+# CHECK_SSH: If true, SSH connections prevent suspend (default: false)
+Environment="WAIT_MINUTES=10"
 Environment="CPU_IDLE_THRESHOLD=90"
 Environment="GPU_USAGE_MAX=10"
 Environment="CHECK_INTERVAL=60"
+Environment="CHECK_SSH=false"
 
 ExecStart=/usr/bin/python3 /opt/ai-server/auto-suspend-monitor.py
 Restart=always

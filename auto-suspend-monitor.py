@@ -23,6 +23,7 @@ WAIT_MINUTES = int(os.getenv('WAIT_MINUTES', '30'))
 CPU_IDLE_THRESHOLD = int(os.getenv('CPU_IDLE_THRESHOLD', '90'))  # CPU must be >90% idle
 GPU_USAGE_MAX = int(os.getenv('GPU_USAGE_MAX', '10'))  # GPU usage must be <10%
 CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL', '60'))  # Check every 60 seconds
+CHECK_SSH = os.getenv('CHECK_SSH', 'false').lower() == 'true'  # Optional: check SSH connections
 
 STAY_AWAKE_FILE = "/run/ai-nodectl/stay_awake_until"
 STATE_FILE = "/var/lib/ai-auto-suspend/idle_since"
@@ -177,8 +178,8 @@ class AutoSuspendMonitor:
         """Check all suspend conditions"""
         cpu_idle = self._get_cpu_idle()
         gpu_usage = self._get_gpu_usage()
-        ssh_active = self._check_ssh_active()
-        api_active = self._check_api_active()
+        ssh_active = self._check_ssh_active() if CHECK_SSH else False
+        api_active = self._check_api_active()  # Still check but don't use in conditions
         stay_awake = self._check_stay_awake()
 
         cpu_idle_ok = cpu_idle >= CPU_IDLE_THRESHOLD
@@ -187,13 +188,22 @@ class AutoSuspendMonitor:
         no_api = not api_active
         no_stay_awake = not stay_awake
 
-        all_conditions_met = (
-            cpu_idle_ok and
-            gpu_idle_ok and
-            no_ssh and
-            no_api and
-            no_stay_awake
-        )
+        # Primary conditions: CPU and GPU idle + stay_awake flag
+        # API connections are ignored - they don't prevent suspend
+        # SSH is optional (controlled by CHECK_SSH environment variable)
+        if CHECK_SSH:
+            all_conditions_met = (
+                cpu_idle_ok and
+                gpu_idle_ok and
+                no_ssh and
+                no_stay_awake
+            )
+        else:
+            all_conditions_met = (
+                cpu_idle_ok and
+                gpu_idle_ok and
+                no_stay_awake
+            )
 
         return {
             'cpu_idle': cpu_idle,
@@ -226,12 +236,15 @@ class AutoSuspendMonitor:
         """Run a single check cycle"""
         conditions = self.check_conditions()
 
-        logger.info(
+        log_msg = (
             f"Check: CPU idle={conditions['cpu_idle']:.1f}% (need >={CPU_IDLE_THRESHOLD}%), "
             f"GPU usage={conditions['gpu_usage']:.1f}% (need <={GPU_USAGE_MAX}%), "
-            f"SSH={conditions['ssh_active']}, API={conditions['api_active']}, "
             f"stay_awake={conditions['stay_awake']}"
         )
+        if CHECK_SSH:
+            log_msg += f", SSH={conditions['ssh_active']}"
+
+        logger.info(log_msg)
 
         if conditions['all_conditions_met']:
             # System is idle
@@ -276,6 +289,8 @@ class AutoSuspendMonitor:
         logger.info(f"  CPU idle threshold: >={CPU_IDLE_THRESHOLD}%")
         logger.info(f"  GPU usage threshold: <={GPU_USAGE_MAX}%")
         logger.info(f"  Check interval: {CHECK_INTERVAL} seconds")
+        logger.info(f"  Check SSH connections: {CHECK_SSH}")
+        logger.info(f"  API connections: ignored (do not prevent suspend)")
 
         while True:
             try:

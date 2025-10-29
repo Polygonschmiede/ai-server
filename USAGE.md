@@ -219,7 +219,7 @@ sudo systemctl status ai-stayawake-http.service
 
 ### Auto-Suspend Feature
 
-Your server automatically suspends after **30 minutes** of inactivity by default.
+Your server automatically suspends after **10 minutes** of inactivity by default.
 
 #### Check Auto-Suspend Status:
 
@@ -239,17 +239,17 @@ cat /var/log/syslog | grep "ai-auto-suspend" | tail -20
 The server will **suspend** when ALL of these are true:
 - ✅ CPU idle > 90% (configurable)
 - ✅ GPU utilization < 10% (configurable)
-- ✅ No GPU processes running
-- ✅ No SSH sessions active
-- ✅ No connections to AI service ports (8080, 11434, 3000, etc.)
-- ✅ Idle for 30+ minutes (configurable)
+- ✅ Idle for 10+ minutes (configurable)
+- ✅ No stay-awake flag active
+- ✅ No SSH sessions active (optional, disabled by default)
+
+**Note:** API connections (ports 8080, 11434, 3000) are **ignored** - they do not prevent suspend. Only CPU/GPU activity matters.
 
 The server will **stay awake** when ANY of these are true:
-- 🔴 Active SSH session
-- 🔴 AI API in use (connections on ports 8080, 11434, etc.)
 - 🔴 GPU is busy (> 10% utilization)
 - 🔴 CPU is busy (< 90% idle)
 - 🔴 Stay-awake service activated (see below)
+- 🔴 Active SSH session (only if CHECK_SSH=true)
 
 #### Configure Auto-Suspend:
 
@@ -259,12 +259,28 @@ sudo systemctl edit ai-auto-suspend.service --full
 ```
 
 Key environment variables:
-- `WAIT_MINUTES=30` - Minutes of idle time before suspend
+- `WAIT_MINUTES=10` - Minutes of idle time before suspend
 - `CPU_IDLE_THRESHOLD=90` - CPU idle percentage required
 - `GPU_USAGE_MAX=10` - Max GPU utilization for idle
 - `CHECK_INTERVAL=60` - Check interval in seconds
+- `CHECK_SSH=false` - If true, SSH connections prevent suspend (default: false)
 
 After editing:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart ai-auto-suspend.service
+```
+
+#### Enable SSH Check:
+
+By default, SSH connections do NOT prevent suspend. To make SSH connections keep the server awake:
+
+```bash
+sudo systemctl edit ai-auto-suspend.service --full
+```
+
+Change `CHECK_SSH=false` to `CHECK_SSH=true`, then:
+
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl restart ai-auto-suspend.service
