@@ -25,6 +25,7 @@ from monitoring import SystemMonitor
 from power import PowerManager
 from system import SystemManager
 from remote import RemoteManager
+from system_ui import SystemManagementUI
 
 
 class GoatHeader(Static):
@@ -216,6 +217,40 @@ class AIGoatApp(App):
     TabPane {
         padding: 1;
     }
+
+    #action-grid {
+        grid-size: 3;
+        grid-gutter: 1;
+        height: auto;
+        margin: 1 0;
+    }
+
+    #action-grid Button {
+        width: 100%;
+        height: 3;
+    }
+
+    #system-title {
+        text-align: center;
+        margin-bottom: 1;
+    }
+
+    #system-status {
+        background: $panel;
+        border: solid cyan;
+        padding: 1;
+        margin-bottom: 1;
+        height: auto;
+    }
+
+    #system-output {
+        background: $panel;
+        border: solid green;
+        padding: 1;
+        margin-top: 1;
+        height: auto;
+        min-height: 10;
+    }
     """
 
     BINDINGS = [
@@ -237,26 +272,7 @@ class AIGoatApp(App):
                     yield PowerStatus()
 
             with TabPane("System Management", id="tab-system"):
-                yield Static("""[bold cyan]═══ System Management ═══[/bold cyan]
-
-[yellow]Available Actions:[/yellow]
-
-  [bold]1.[/bold] Install LocalAI
-  [bold]2.[/bold] Install Ollama
-  [bold]3.[/bold] Repair Installation
-  [bold]4.[/bold] Start Services
-  [bold]5.[/bold] Stop Services
-  [bold]6.[/bold] View Logs
-
-[dim]Use arrow keys and Enter to select[/dim]
-[dim]Press 'q' to return to main menu[/dim]
-
-[yellow]Quick Commands:[/yellow]
-  ./ai-server-manager.sh status    - Check status
-  ./ai-server-manager.sh both      - Start both services
-  ./ai-server-manager.sh ollama    - Start Ollama only
-  ./ai-server-manager.sh stop      - Stop all services
-""")
+                yield SystemManagementUI()
 
             with TabPane("Remote Control", id="tab-remote"):
                 yield RemoteControl()

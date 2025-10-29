@@ -1,0 +1,34 @@
+[Unit]
+Description=AI Server Auto-Suspend Monitor
+Documentation=https://github.com/Polygonschmiede/ai-server
+After=network.target stay-awake.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/ai-server
+
+# Configuration via environment variables
+Environment="WAIT_MINUTES=30"
+Environment="CPU_IDLE_THRESHOLD=90"
+Environment="GPU_USAGE_MAX=10"
+Environment="CHECK_INTERVAL=60"
+
+ExecStart=/usr/bin/python3 /opt/ai-server/auto-suspend-monitor.py
+Restart=always
+RestartSec=10
+
+# Security settings
+PrivateTmp=yes
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/run/ai-nodectl /var/lib/ai-auto-suspend
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ai-auto-suspend
+
+[Install]
+WantedBy=multi-user.target
