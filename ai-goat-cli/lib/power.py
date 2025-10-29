@@ -105,22 +105,26 @@ class PowerManager:
             return False
 
     def _estimate_idle_minutes(self, stats: Dict[str, Any], config: Dict[str, int]) -> int:
-        """Estimate how many minutes the system has been idle"""
-        # This is an estimate - the actual value is tracked by ai-auto-suspend service
-        # We can only determine if conditions are met NOW
+        """Get actual idle minutes from auto-suspend service state"""
+        state_file = "/var/lib/ai-auto-suspend/idle_since"
 
-        cpu_idle = stats['cpu_percent'] < (100 - config['cpu_threshold'])
-        gpu_idle = stats['gpu_util'] <= config['gpu_threshold']
-        no_ssh = not self._check_ssh_active()
-        no_api = not self._check_api_active()
+        # Try to read the state file maintained by auto-suspend service
+        if not os.path.exists(state_file):
+            return 0
 
-        # If all conditions are met, we estimate idle time
-        # In reality, this would require reading from the service's state
-        if cpu_idle and gpu_idle and no_ssh and no_api:
-            # System is currently idle
-            # We could store the last non-idle time and calculate from there
-            return 0  # Placeholder - would need persistent state
-        else:
+        try:
+            with open(state_file, 'r') as f:
+                content = f.read().strip()
+                if not content:
+                    return 0
+
+                idle_since = float(content)
+                now = time.time()
+                idle_seconds = now - idle_since
+                idle_minutes = int(idle_seconds / 60)
+
+                return max(0, idle_minutes)
+        except Exception:
             return 0
 
     def get_status(self) -> Dict[str, Any]:
