@@ -14,11 +14,13 @@ Both servers:
 - Support NVIDIA GPU acceleration
 - Provide OpenAI-compatible APIs
 - Work with n8n and other tools
-- Can be installed on the same system
+- **Can run in parallel** on the same system sharing GPU resources
 
 **New to this?** Start with Ollama for the easiest experience. See [OLLAMA.md](OLLAMA.md) for installation and usage.
 
-**Want both?** Install LocalAI first (see below), then run `sudo bash install-ollama.sh`. Use `./ai-server-manager.sh` to switch between them.
+**Want both?** Install LocalAI first (see below), then run `sudo bash install-ollama.sh`. Use `./ai-server-manager.sh` to manage them:
+- Run them **separately** (exclusive mode - one at a time)
+- Run them **together** (parallel mode - both sharing GPU)
 
 ## Features
 
@@ -40,8 +42,16 @@ Both servers:
 
 ### Operations
 - **Idempotent**: Safe to run multiple times without breaking existing installations
-- **Repair Mode**: `--repair` flag to reconfigure services without reinstalling
+- **Repair Mode**: `--repair` flag to reconfigure services without reinstalling (both installers)
+- **Safe Uninstall**: Both installers detect existing installations and offer clean removal
 - **State Persistence**: Configuration survives reboots and updates
+- **Verification Script**: `verify-setup.sh` checks all components and provides detailed status
+
+### Service Management
+- **Unified Control**: Single `ai-server-manager.sh` script to manage both services
+- **Parallel Operation**: Run both LocalAI and Ollama simultaneously
+- **Exclusive Mode**: Run only one service at a time (automatic stop of the other)
+- **Easy Model Management**: Pull and list Ollama models through the manager script
 
 ## Requirements
 
@@ -113,6 +123,64 @@ sudo bash install.sh \
 | `--timezone ZONE` | System timezone | `Europe/Berlin` |
 | `--server-ip IP` | Server IP for status messages | `192.168.178.50` |
 
+## Managing AI Services
+
+After installation, use the unified management script to control your AI servers:
+
+### Parallel Mode (Both Services Running)
+
+Run both LocalAI and Ollama simultaneously:
+```bash
+./ai-server-manager.sh both
+```
+
+Both services will share GPU memory. This works well for:
+- Testing different models
+- Comparing responses
+- Having multiple API endpoints available
+
+**Note**: Monitor GPU memory usage with `nvidia-smi`. If you experience OOM errors, run services in exclusive mode.
+
+### Exclusive Mode (One Service at a Time)
+
+Switch to LocalAI (stops Ollama if running):
+```bash
+./ai-server-manager.sh localai
+```
+
+Switch to Ollama (stops LocalAI if running):
+```bash
+./ai-server-manager.sh ollama
+```
+
+### Check Status
+
+View all services:
+```bash
+./ai-server-manager.sh status
+```
+
+### Stop All Services
+
+```bash
+./ai-server-manager.sh stop
+```
+
+### Verify Installation
+
+Run the verification script to check all components:
+```bash
+./verify-setup.sh
+```
+
+This will check:
+- Docker installation and status
+- NVIDIA GPU and drivers
+- LocalAI installation and API
+- Ollama installation and API
+- Support services (auto-suspend, stay-awake)
+- Firewall configuration
+
 ## Usage Examples
 
 ### Access LocalAI
@@ -121,6 +189,13 @@ After installation, LocalAI is available at:
 - **API/WebUI**: `http://<server-ip>:8080`
 - **Health Check**: `http://<server-ip>:8080/readyz`
 - **OpenAI-compatible API**: `http://<server-ip>:8080/v1/`
+
+### Access Ollama
+
+After installation, Ollama is available at:
+- **API**: `http://<server-ip>:11434`
+- **Open WebUI**: `http://<server-ip>:3000`
+- **OpenAI-compatible API**: `http://<server-ip>:11434/v1/`
 
 ### Stay-Awake Service
 

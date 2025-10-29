@@ -41,6 +41,9 @@ sudo bash install-ollama.sh --cpu-only
 # Non-interactive installation
 sudo bash install-ollama.sh --non-interactive
 
+# Repair existing installation
+sudo bash install-ollama.sh --repair
+
 # Custom ports and paths
 sudo bash install-ollama.sh \
   --ollama-port 11434 \
@@ -48,12 +51,18 @@ sudo bash install-ollama.sh \
   --models-path /data/ollama-models
 ```
 
+**Note**: The installer will automatically detect existing installations and offer to:
+- Perform a clean reinstallation
+- Reconfigure the existing installation
+- Repair mode with `--repair` flag
+
 ## Configuration Options
 
 | Flag | Description | Default |
 |------|-------------|---------|
 | `--cpu-only` | Run without GPU support | GPU mode |
 | `--non-interactive` | Skip all prompts | Interactive |
+| `--repair` | Repair existing installation | Normal install |
 | `--models-path PATH` | Host directory for models | `/opt/ollama/models` |
 | `--ollama-port PORT` | Ollama API port | `11434` |
 | `--webui-port PORT` | Open WebUI port | `3000` |
@@ -84,7 +93,7 @@ Current Status:
   Ollama:   STOPPED
 ```
 
-### Switch to Ollama
+### Switch to Ollama (Exclusive Mode)
 
 ```bash
 ./ai-server-manager.sh ollama
@@ -95,17 +104,43 @@ This will:
 2. Start Ollama and Open WebUI
 3. Display connection info
 
-### Switch to LocalAI
+### Switch to LocalAI (Exclusive Mode)
 
 ```bash
 ./ai-server-manager.sh localai
 ```
+
+### Run Both Services in Parallel
+
+```bash
+./ai-server-manager.sh both
+```
+
+This starts both LocalAI and Ollama simultaneously. Both services will share GPU memory.
+
+**Note**: If you experience GPU memory issues, use exclusive mode (run only one service at a time).
 
 ### Stop All Services
 
 ```bash
 ./ai-server-manager.sh stop
 ```
+
+### Verify Installation
+
+Check that everything is working correctly:
+
+```bash
+./verify-setup.sh
+```
+
+This comprehensive check will verify:
+- Docker installation
+- NVIDIA GPU and drivers (if applicable)
+- Ollama service and container status
+- Open WebUI status
+- API endpoints responding
+- Installed models
 
 ## Model Management
 
@@ -418,8 +453,9 @@ docker exec ollama ollama stop <model-name>  # Stop a specific model
 ```bash
 # Management
 ./ai-server-manager.sh status      # Check what's running
-./ai-server-manager.sh ollama      # Switch to Ollama
-./ai-server-manager.sh localai     # Switch to LocalAI
+./ai-server-manager.sh ollama      # Switch to Ollama (exclusive)
+./ai-server-manager.sh localai     # Switch to LocalAI (exclusive)
+./ai-server-manager.sh both        # Run both in parallel
 ./ai-server-manager.sh stop        # Stop all AI servers
 
 # Models
