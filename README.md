@@ -2,6 +2,23 @@
 
 Automated installation and configuration scripts for AI model servers on Ubuntu 24.04 with NVIDIA GPU support, Docker Compose orchestration, and intelligent power management.
 
+## 📚 Documentation
+
+- **[USAGE.md](USAGE.md)** - 🎯 **Start here!** Complete usage guide with:
+  - How to use the Web UI
+  - Download and switch models
+  - Monitor GPU/CPU status
+  - Auto-suspend and Wake-on-LAN
+  - Daily usage commands
+- **[ai-goat-cli/](ai-goat-cli/)** - 🐐 **AI GOAT CLI** - Interactive terminal dashboard:
+  - Real-time GPU/CPU monitoring with power consumption (Watts)
+  - Auto-suspend countdown timer
+  - Wake-on-LAN and remote control info
+  - Beautiful TUI (Terminal User Interface)
+  - See [ai-goat-cli/README.md](ai-goat-cli/README.md)
+- **[OLLAMA.md](OLLAMA.md)** - Ollama-specific installation and features
+- **[AGENTS.md](AGENTS.md)** - Development guidelines
+
 ## Available AI Servers
 
 This repository provides installers for two AI server options:

@@ -1306,13 +1306,79 @@ fi
 info "Lade systemd-Konfiguration neu..."
 sudo systemctl daemon-reload
 
-info "Aktiviere und starte LocalAI Service..."
-info "Dies kann einige Minuten dauern (Docker-Image wird heruntergeladen)..."
-if sudo systemctl enable --now "${SERVICE_NAME}"; then
-  success "LocalAI Service gestartet"
-else
-  err "Fehler beim Starten des LocalAI Service"
+info "Aktiviere LocalAI Service..."
+sudo systemctl enable "${SERVICE_NAME}"
+success "Service aktiviert"
+
+echo ""
+info "Starte LocalAI Service..."
+warn "Docker lädt jetzt das Image herunter - dies kann 5-15 Minuten dauern!"
+info "Bitte warten Sie, während der Download läuft..."
+echo ""
+
+# Start service in background and monitor progress
+sudo systemctl start "${SERVICE_NAME}" &
+START_PID=$!
+
+# Show progress while service starts
+log "Service wird gestartet (PID: $START_PID)..."
+DOTS=0
+SECONDS_WAITED=0
+while kill -0 $START_PID 2>/dev/null; do
+  printf "\r\033[1;36m[⏳] Starte LocalAI Service... %ds vergangen\033[0m" $SECONDS_WAITED
+  sleep 2
+  SECONDS_WAITED=$((SECONDS_WAITED + 2))
+
+  # Show intermediate status every 15 seconds
+  if [ $((SECONDS_WAITED % 15)) -eq 0 ] && [ $SECONDS_WAITED -gt 0 ]; then
+    echo ""
+    info "Status-Update nach ${SECONDS_WAITED}s:"
+    if "${DOCKER_CMD}" ps -a --filter "name=localai" --format "table {{.Names}}\t{{.Status}}" 2>/dev/null | grep -q "localai"; then
+      "${DOCKER_CMD}" ps -a --filter "name=localai" --format "  Container: {{.Names}} - {{.Status}}" 2>/dev/null || true
+    else
+      info "  Container wird vorbereitet..."
+    fi
+  fi
+done
+wait $START_PID
+START_STATUS=$?
+echo ""
+
+if [ $START_STATUS -ne 0 ]; then
+  err "Service-Start fehlgeschlagen!"
+  echo ""
+  warn "Zeige Service-Status zur Fehleranalyse:"
+  sudo systemctl status "${SERVICE_NAME}" --no-pager || true
+  echo ""
+  warn "Zeige Container-Logs zur Fehleranalyse:"
+  "${DOCKER_CMD}" logs localai 2>&1 | tail -n 30 || true
   exit 1
+fi
+
+success "systemctl start Befehl abgeschlossen (nach ${SECONDS_WAITED}s)"
+
+# Wait for container to actually start
+echo ""
+info "Warte auf Container-Start..."
+WAIT_COUNT=0
+MAX_WAIT=60
+while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+  if "${DOCKER_CMD}" ps --format '{{.Names}}' | grep -q '^localai$'; then
+    success "LocalAI Container läuft!"
+    break
+  fi
+  printf "."
+  sleep 2
+  WAIT_COUNT=$((WAIT_COUNT + 2))
+done
+echo ""
+
+if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
+  warn "Container startete nicht innerhalb von ${MAX_WAIT} Sekunden"
+  info "Container-Status:"
+  "${DOCKER_CMD}" ps -a --filter "name=localai" || true
+  info "Service-Status:"
+  sudo systemctl status "${SERVICE_NAME}" --no-pager || true
 fi
 
 # --------------------------

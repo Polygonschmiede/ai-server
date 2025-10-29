@@ -370,15 +370,75 @@ log "Validating docker-compose.yml..."
 
 log "Enabling and starting Ollama service..."
 sudo systemctl daemon-reload
-sudo systemctl enable --now "${SERVICE_NAME}"
+sudo systemctl enable "${SERVICE_NAME}"
+
+log "Starting Ollama service (this may take a few minutes)..."
+log "Docker will download images if not already cached..."
+sudo systemctl start "${SERVICE_NAME}" &
+START_PID=$!
+
+# Show progress while service starts
+log "Monitoring service startup..."
+DOTS=0
+while kill -0 $START_PID 2>/dev/null; do
+  printf "."
+  DOTS=$((DOTS + 1))
+  if [ $DOTS -ge 3 ]; then
+    printf "\r   "
+    printf "\r"
+    DOTS=0
+  fi
+  sleep 1
+done
+wait $START_PID
+START_STATUS=$?
+echo ""
+
+if [ $START_STATUS -ne 0 ]; then
+  err "Service start command failed!"
+  log "Checking service status..."
+  sudo systemctl status "${SERVICE_NAME}" --no-pager || true
+  exit 1
+fi
 
 # --------------------------
 # Post-checks
 # --------------------------
-log "Checking status..."
-sleep 5
+log "Waiting for containers to start..."
+WAIT_COUNT=0
+MAX_WAIT=60
+while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+  if "${DOCKER_CMD}" ps --format '{{.Names}}' | grep -q '^ollama$'; then
+    log "✓ Ollama container is running"
+    break
+  fi
+  printf "."
+  sleep 2
+  WAIT_COUNT=$((WAIT_COUNT + 2))
+done
+echo ""
 
-if curl -fsS "http://127.0.0.1:${OLLAMA_PORT}/" >/dev/null 2>&1; then
+if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
+  warn "Containers did not start within ${MAX_WAIT} seconds"
+  log "Container status:"
+  "${DOCKER_CMD}" ps -a || true
+  log "Service status:"
+  sudo systemctl status "${SERVICE_NAME}" --no-pager || true
+fi
+
+log "Checking Ollama API endpoint..."
+READY=0
+for i in $(seq 1 10); do
+  if curl -fsS "http://127.0.0.1:${OLLAMA_PORT}/" >/dev/null 2>&1; then
+    READY=1
+    break
+  fi
+  printf "."
+  sleep 2
+done
+echo ""
+
+if [ $READY -eq 1 ]; then
   log "✓ Ollama is ready!"
   echo ""
   log "Ollama API: http://localhost:${OLLAMA_PORT}"

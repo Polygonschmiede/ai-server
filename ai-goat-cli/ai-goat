@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# AI GOAT - Wrapper script to activate venv and run Python app
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Check if venv exists
+if [ ! -d "${SCRIPT_DIR}/venv" ]; then
+    echo "Virtual environment not found. Please run install-cli.sh first."
+    echo "  cd ${SCRIPT_DIR} && bash install-cli.sh"
+    exit 1
+fi
+
+# Activate venv and run Python app
+source "${SCRIPT_DIR}/venv/bin/activate"
+python3 "${SCRIPT_DIR}/ai-goat.py" "$@"
