@@ -14,6 +14,7 @@ set -euo pipefail
 # Flags:
 #   --cpu-only             : Run without GPU support
 #   --non-interactive      : No prompts or pauses
+#   --repair               : Repair existing installation
 #   --models-path PATH     : Host path for models (default: /opt/ollama/models)
 #   --ollama-port PORT     : External Ollama API port (default: 11434)
 #   --webui-port PORT      : External Open WebUI port (default: 3000)
@@ -24,6 +25,10 @@ set -euo pipefail
 # --------------------------
 MODE="gpu"
 NONINTERACTIVE="false"
+REPAIR_ONLY="false"
+EXISTING_INSTALLATION="false"
+EXISTING_COMPONENTS=()
+PERSISTED_DIRECTORIES=()
 OLLAMA_DIR="/opt/ollama"
 MODELS_PATH="/opt/ollama/models"
 WEBUI_DATA="/opt/ollama/webui"
@@ -44,6 +49,193 @@ die() { err "$*"; exit 1; }
 
 require_cmd() { command -v "$1" >/dev/null 2>&1 || die "Required command missing: $1"; }
 
+join_by() {
+  local delimiter="$1"
+  shift
+  if [[ $# -eq 0 ]]; then
+    printf ''
+    return 0
+  fi
+  local first="$1"
+  shift
+  printf '%s' "${first}"
+  local item
+  for item in "$@"; do
+    printf '%s%s' "${delimiter}" "${item}"
+  done
+}
+
+prompt_yes_no() {
+  local prompt="$1"
+  local default="${2:-n}"
+  local response
+  if [[ "${default,,}" == "y" ]]; then
+    read -r -p "${prompt} [Y/n]: " response
+    case "${response,,}" in
+      n|no) return 1 ;;
+      *) return 0 ;;
+    esac
+  else
+    read -r -p "${prompt} [y/N]: " response
+    case "${response,,}" in
+      y|yes) return 0 ;;
+      *) return 1 ;;
+    esac
+  fi
+}
+
+# --------------------------
+# Checks for existing installation
+# --------------------------
+systemd_unit_exists() {
+  [[ -f "/etc/systemd/system/${SERVICE_NAME}" ]]
+}
+
+unit_exists() {
+  local unit="$1"
+  systemctl list-unit-files "${unit}" --no-legend 2>/dev/null | grep -q "${unit}"
+}
+
+docker_container_exists() {
+  local bin
+  bin="$(command -v docker 2>/dev/null || true)"
+  [[ -z "${bin}" ]] && return 1
+  "${bin}" ps -a --format '{{.Names}}' 2>/dev/null | grep -qE '^(ollama|open-webui)$'
+}
+
+stop_service() {
+  local service="$1"
+  if systemctl is-active --quiet "${service}" 2>/dev/null; then
+    sudo systemctl stop "${service}" 2>/dev/null || true
+  fi
+}
+
+disable_service() {
+  local service="$1"
+  if systemctl is-enabled --quiet "${service}" 2>/dev/null; then
+    sudo systemctl disable "${service}" 2>/dev/null || true
+  fi
+}
+
+backup_file() {
+  local file="$1"
+  if [[ -f "${file}" ]]; then
+    local backup="${file}.backup.$(date +%s)"
+    sudo cp "${file}" "${backup}"
+    log "Backup created: ${backup}"
+  fi
+}
+
+stop_ollama_service() {
+  if systemctl list-unit-files "${SERVICE_NAME}" --no-legend 2>/dev/null | grep -q "${SERVICE_NAME}"; then
+    log "Stopping Ollama systemd service..."
+    stop_service "${SERVICE_NAME}"
+  fi
+}
+
+stop_ollama_containers() {
+  local bin
+  bin="$(command -v docker 2>/dev/null || true)"
+  [[ -z "${bin}" ]] && return 0
+  if ! docker_container_exists; then
+    return 0
+  fi
+  log "Stopping Ollama containers..."
+  if [[ -d "${OLLAMA_DIR}" ]]; then
+    ( cd "${OLLAMA_DIR}" && "${bin}" compose down --remove-orphans >/dev/null 2>&1 ) || true
+  fi
+  "${bin}" rm -f ollama open-webui >/dev/null 2>&1 || true
+}
+
+detect_existing_installation() {
+  EXISTING_COMPONENTS=()
+  PERSISTED_DIRECTORIES=()
+  local found="false"
+
+  if [[ -f "${COMPOSE_FILE}" ]]; then
+    EXISTING_COMPONENTS+=("docker-compose.yml")
+    found="true"
+  fi
+
+  if systemd_unit_exists; then
+    EXISTING_COMPONENTS+=("systemd service")
+    found="true"
+  fi
+
+  if docker_container_exists; then
+    EXISTING_COMPONENTS+=("docker containers")
+    found="true"
+  fi
+
+  [[ -d "${OLLAMA_DIR}" ]] && PERSISTED_DIRECTORIES+=("${OLLAMA_DIR}")
+  [[ -d "${MODELS_PATH}" ]] && PERSISTED_DIRECTORIES+=("${MODELS_PATH}")
+  [[ -d "${WEBUI_DATA}" ]] && PERSISTED_DIRECTORIES+=("${WEBUI_DATA}")
+
+  if [[ "${found}" == "true" ]]; then
+    EXISTING_INSTALLATION="true"
+  else
+    EXISTING_INSTALLATION="false"
+  fi
+}
+
+safe_uninstall() {
+  log "Performing clean uninstallation of existing Ollama installation..."
+  stop_ollama_service
+  stop_ollama_containers
+
+  if [[ -f "/etc/systemd/system/${SERVICE_NAME}" ]]; then
+    backup_file "/etc/systemd/system/${SERVICE_NAME}"
+    sudo rm -f "/etc/systemd/system/${SERVICE_NAME}"
+  fi
+
+  if [[ -f "${COMPOSE_FILE}" ]]; then
+    backup_file "${COMPOSE_FILE}"
+    sudo rm -f "${COMPOSE_FILE}"
+  fi
+
+  sudo systemctl disable "${SERVICE_NAME}" >/dev/null 2>&1 || true
+  sudo systemctl daemon-reload
+
+  log "Uninstallation complete. Model data preserved in: ${MODELS_PATH}"
+}
+
+handle_existing_installation() {
+  detect_existing_installation
+
+  if [[ "${EXISTING_INSTALLATION}" != "true" ]]; then
+    if [[ "${REPAIR_ONLY}" == "true" ]]; then
+      warn "Repair mode requested, but no existing installation found - starting regular installation."
+      REPAIR_ONLY="false"
+    fi
+    return
+  fi
+
+  local components
+  components="$(join_by ', ' "${EXISTING_COMPONENTS[@]}")"
+  warn "Found existing Ollama installation: ${components}"
+
+  if [[ "${REPAIR_ONLY}" == "true" ]]; then
+    log "Repair mode active - stopping service for reconfiguration."
+    stop_ollama_service
+    stop_ollama_containers
+    return
+  fi
+
+  if [[ "${NONINTERACTIVE}" == "true" ]]; then
+    log "Non-interactive mode: existing installation will be automatically replaced."
+    safe_uninstall
+    return
+  fi
+
+  if prompt_yes_no "Existing installation found (${components}). Perform clean reinstallation?"; then
+    safe_uninstall
+  else
+    log "Skipping uninstallation - reconfiguring existing installation."
+    stop_ollama_service
+    stop_ollama_containers
+  fi
+}
+
 # --------------------------
 # Argument parsing
 # --------------------------
@@ -51,6 +243,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --cpu-only) MODE="cpu"; shift ;;
     --non-interactive) NONINTERACTIVE="true"; shift ;;
+    --repair) REPAIR_ONLY="true"; shift ;;
     --models-path) MODELS_PATH="${2:?}"; shift 2 ;;
     --ollama-port) OLLAMA_PORT="${2:?}"; shift 2 ;;
     --webui-port) WEBUI_PORT="${2:?}"; shift 2 ;;
@@ -58,6 +251,8 @@ while [[ $# -gt 0 ]]; do
     *) die "Unknown argument: $1" ;;
   esac
 done
+
+handle_existing_installation
 
 # --------------------------
 # Checks
@@ -98,18 +293,12 @@ if [[ "${MODE}" == "gpu" ]]; then
 fi
 
 # --------------------------
-# Check for LocalAI conflict
+# Check for parallel LocalAI operation
 # --------------------------
 if systemctl is-active --quiet localai.service 2>/dev/null; then
-  warn "LocalAI service is currently running."
-  warn "Both services can run simultaneously, but will use more resources."
-  if [[ "${NONINTERACTIVE}" != "true" ]]; then
-    read -r -p "Continue? [y/N]: " response
-    case "${response}" in
-      [yY]|[yY][eE][sS]) ;;
-      *) die "Installation cancelled." ;;
-    esac
-  fi
+  log "LocalAI service is currently running."
+  log "Both services can run in parallel and share GPU resources."
+  log "Tip: Use ./ai-server-manager.sh to manage both services."
 fi
 
 # --------------------------
@@ -147,7 +336,6 @@ Description=Ollama AI Server with Open WebUI via Docker Compose
 Requires=docker.service
 After=network-online.target docker.service
 Wants=network-online.target
-Conflicts=localai.service
 
 [Service]
 Type=oneshot
@@ -207,14 +395,36 @@ else
   warn "Ollama endpoint not ready yet. Check logs with: docker logs -f ollama"
 fi
 
-log "Installation complete! 🚀"
+log ""
+log "=========================================="
+log "✓ Installation complete!"
+log "=========================================="
+log ""
+log "Ollama Server Status:"
+log "  Service:     ${SERVICE_NAME}"
+log "  API:         http://localhost:${OLLAMA_PORT}"
+log "  Open WebUI:  http://localhost:${WEBUI_PORT}"
+log "  Models dir:  ${MODELS_PATH}"
 log ""
 log "Quick start:"
-log "  1. Pull a model: ./ai-server-manager.sh pull llama3.2"
-log "  2. Open WebUI: http://localhost:${WEBUI_PORT}"
-log "  3. Use with n8n: Point to http://localhost:${OLLAMA_PORT}"
+log "  1. Pull a model:"
+log "     ./ai-server-manager.sh pull llama3.2"
+log "     ./ai-server-manager.sh pull mistral"
 log ""
-log "Switch between LocalAI and Ollama:"
-log "  ./ai-server-manager.sh localai    # Switch to LocalAI"
-log "  ./ai-server-manager.sh ollama     # Switch to Ollama"
-log "  ./ai-server-manager.sh status     # Check status"
+log "  2. Open Web Interface:"
+log "     http://localhost:${WEBUI_PORT}"
+log ""
+log "  3. Check status:"
+log "     ./ai-server-manager.sh status"
+log ""
+log "Management commands:"
+log "  ./ai-server-manager.sh status      # View all services"
+log "  ./ai-server-manager.sh models      # List installed models"
+log "  ./ai-server-manager.sh both        # Start both LocalAI and Ollama"
+log "  ./ai-server-manager.sh stop        # Stop all services"
+log ""
+log "Troubleshooting:"
+log "  sudo systemctl status ${SERVICE_NAME}"
+log "  docker logs -f ollama"
+log "  docker logs -f open-webui"
+log ""

@@ -45,7 +45,7 @@ print_status() {
 }
 
 start_localai() {
-  echo -e "${COLOR_YELLOW}Switching to LocalAI...${COLOR_RESET}"
+  echo -e "${COLOR_YELLOW}Switching to LocalAI (exclusive mode)...${COLOR_RESET}"
 
   if systemctl is-active --quiet ollama.service 2>/dev/null; then
     echo "  Stopping Ollama..."
@@ -63,7 +63,7 @@ start_localai() {
 }
 
 start_ollama() {
-  echo -e "${COLOR_YELLOW}Switching to Ollama...${COLOR_RESET}"
+  echo -e "${COLOR_YELLOW}Switching to Ollama (exclusive mode)...${COLOR_RESET}"
 
   if systemctl is-active --quiet localai.service 2>/dev/null; then
     echo "  Stopping LocalAI..."
@@ -80,6 +80,32 @@ start_ollama() {
   echo ""
   echo "To pull models, use:"
   echo "  docker exec ollama ollama pull llama3.2"
+  echo ""
+}
+
+start_both() {
+  echo -e "${COLOR_YELLOW}Starting both LocalAI and Ollama (parallel mode)...${COLOR_RESET}"
+  echo ""
+  echo -e "${COLOR_BLUE}Note: Both services will share GPU memory.${COLOR_RESET}"
+  echo "  If you experience OOM errors, run one service at a time."
+  echo ""
+
+  echo "  Starting LocalAI..."
+  sudo systemctl start localai.service 2>/dev/null || warn "Failed to start LocalAI"
+
+  echo "  Starting Ollama..."
+  sudo systemctl start ollama.service 2>/dev/null || warn "Failed to start Ollama"
+
+  echo ""
+  echo -e "${COLOR_GREEN}Both services are now running!${COLOR_RESET}"
+  echo ""
+  echo "LocalAI:"
+  echo "  API:    http://localhost:8080"
+  echo "  WebUI:  http://localhost:8080"
+  echo ""
+  echo "Ollama:"
+  echo "  API:    http://localhost:11434"
+  echo "  WebUI:  http://localhost:3000"
   echo ""
 }
 
@@ -152,17 +178,19 @@ show_menu() {
 
   echo -e "${COLOR_YELLOW}Available Commands:${COLOR_RESET}"
   echo ""
-  echo "  $0 localai           - Switch to LocalAI"
-  echo "  $0 ollama            - Switch to Ollama"
+  echo "  $0 localai           - Switch to LocalAI (exclusive)"
+  echo "  $0 ollama            - Switch to Ollama (exclusive)"
+  echo "  $0 both              - Start both services (parallel)"
   echo "  $0 stop              - Stop all AI servers"
   echo "  $0 status            - Show current status"
   echo "  $0 models            - List Ollama models"
   echo "  $0 pull <model>      - Pull an Ollama model"
   echo ""
   echo "Examples:"
-  echo "  $0 ollama"
-  echo "  $0 pull llama3.2"
-  echo "  $0 pull mistral"
+  echo "  $0 both              # Run both services together"
+  echo "  $0 ollama            # Run only Ollama"
+  echo "  $0 pull llama3.2     # Download a model"
+  echo "  $0 status            # Check what's running"
   echo ""
 }
 
@@ -180,6 +208,10 @@ main() {
     ollama)
       print_header
       start_ollama
+      ;;
+    both)
+      print_header
+      start_both
       ;;
     stop)
       print_header
