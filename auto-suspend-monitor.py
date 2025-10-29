@@ -187,10 +187,11 @@ class AutoSuspendMonitor:
         no_api = not api_active
         no_stay_awake = not stay_awake
 
+        # SSH connections alone should not prevent suspend
+        # Only check CPU, GPU, API activity, and stay-awake flag
         all_conditions_met = (
             cpu_idle_ok and
             gpu_idle_ok and
-            no_ssh and
             no_api and
             no_stay_awake
         )
@@ -229,8 +230,7 @@ class AutoSuspendMonitor:
         logger.info(
             f"Check: CPU idle={conditions['cpu_idle']:.1f}% (need >={CPU_IDLE_THRESHOLD}%), "
             f"GPU usage={conditions['gpu_usage']:.1f}% (need <={GPU_USAGE_MAX}%), "
-            f"SSH={conditions['ssh_active']}, API={conditions['api_active']}, "
-            f"stay_awake={conditions['stay_awake']}"
+            f"API={conditions['api_active']}, stay_awake={conditions['stay_awake']}"
         )
 
         if conditions['all_conditions_met']:

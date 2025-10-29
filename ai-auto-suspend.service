@@ -9,7 +9,7 @@ User=root
 WorkingDirectory=/opt/ai-server
 
 # Configuration via environment variables
-Environment="WAIT_MINUTES=30"
+Environment="WAIT_MINUTES=10"
 Environment="CPU_IDLE_THRESHOLD=90"
 Environment="GPU_USAGE_MAX=10"
 Environment="CHECK_INTERVAL=60"
