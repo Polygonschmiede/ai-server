@@ -63,7 +63,8 @@ class SystemManagementUI(Container):
 
     def on_mount(self) -> None:
         self.update_status()
-        self.set_interval(5.0, self.update_status)
+        # Update status more frequently for better responsiveness
+        self.set_interval(2.0, self.update_status)
 
     def update_status(self) -> None:
         """Update service status display"""
@@ -72,16 +73,29 @@ class SystemManagementUI(Container):
             ollama_status = self.system_mgr.get_service_status('ollama')
             autosuspend_status = self.system_mgr.get_service_status('ai-auto-suspend')
 
+            # Format service status with installation state
+            def format_status(status):
+                if not status['exists']:
+                    return '[dim]not installed[/dim]'
+                state = '[green]●[/green] Running' if status['active'] else '[red]○[/red] Stopped'
+                enabled = '[green]enabled[/green]' if status['enabled'] else '[yellow]disabled[/yellow]'
+                return f"{state} ({enabled})"
+
             lines = [
                 "[yellow]Current Status:[/yellow]",
                 "",
-                f"LocalAI:      {'[green]●[/green] Running' if localai_status['active'] else '[red]○[/red] Stopped'} "
-                f"({'enabled' if localai_status['enabled'] else 'disabled'})",
-                f"Ollama:       {'[green]●[/green] Running' if ollama_status['active'] else '[red]○[/red] Stopped'} "
-                f"({'enabled' if ollama_status['enabled'] else 'disabled'})",
-                f"Auto-Suspend: {'[green]●[/green] Running' if autosuspend_status['active'] else '[red]○[/red] Stopped'} "
-                f"({'enabled' if autosuspend_status['enabled'] else 'disabled' if autosuspend_status['exists'] else 'not installed'})",
+                f"LocalAI:      {format_status(localai_status)}",
+                f"Ollama:       {format_status(ollama_status)}",
+                f"Auto-Suspend: {format_status(autosuspend_status)}",
             ]
+
+            # Add installation hints
+            if not localai_status['exists']:
+                lines.append("\n[dim]→ Click 'Install LocalAI' to set up[/dim]")
+            if not ollama_status['exists']:
+                lines.append("\n[dim]→ Click 'Install Ollama' to set up[/dim]")
+            if not autosuspend_status['exists']:
+                lines.append("\n[dim]→ Click 'Install Auto-Suspend' to set up[/dim]")
 
             status_widget = self.query_one("#system-status", Static)
             status_widget.update("\n".join(lines))
@@ -100,32 +114,32 @@ class SystemManagementUI(Container):
             output_widget = self.query_one("#system-output", Static)
 
             if button_id == "btn-install-localai":
-                output_widget.update("[yellow]Installing LocalAI... (this may take a while)[/yellow]")
+                output_widget.update("[yellow]Installing LocalAI... (this may take a while)[/yellow]\n\n[dim]Running: sudo bash install.sh --non-interactive[/dim]")
                 success, output = self.system_mgr.install_localai()
                 self._show_result(output_widget, success, "LocalAI Installation", output)
 
             elif button_id == "btn-install-ollama":
-                output_widget.update("[yellow]Installing Ollama... (this may take a while)[/yellow]")
+                output_widget.update("[yellow]Installing Ollama... (this may take a while)[/yellow]\n\n[dim]Running: sudo bash install-ollama.sh --non-interactive[/dim]")
                 success, output = self.system_mgr.install_ollama()
                 self._show_result(output_widget, success, "Ollama Installation", output)
 
             elif button_id == "btn-install-autosuspend":
-                output_widget.update("[yellow]Installing Auto-Suspend system...[/yellow]")
+                output_widget.update("[yellow]Installing Auto-Suspend system...[/yellow]\n\n[dim]Running: sudo bash install-auto-suspend.sh[/dim]")
                 success, output = self.system_mgr.install_auto_suspend()
                 self._show_result(output_widget, success, "Auto-Suspend Installation", output)
 
             elif button_id == "btn-start-both":
-                output_widget.update("[yellow]Starting both services...[/yellow]")
+                output_widget.update("[yellow]Starting both services...[/yellow]\n\n[dim]Running: bash ai-server-manager.sh both[/dim]")
                 success, output = self.system_mgr.run_ai_server_command('both')
                 self._show_result(output_widget, success, "Start Services", output)
 
             elif button_id == "btn-start-localai":
-                output_widget.update("[yellow]Starting LocalAI...[/yellow]")
+                output_widget.update("[yellow]Starting LocalAI...[/yellow]\n\n[dim]Running: bash ai-server-manager.sh localai[/dim]")
                 success, output = self.system_mgr.run_ai_server_command('localai')
                 self._show_result(output_widget, success, "Start LocalAI", output)
 
             elif button_id == "btn-start-ollama":
-                output_widget.update("[yellow]Starting Ollama...[/yellow]")
+                output_widget.update("[yellow]Starting Ollama...[/yellow]\n\n[dim]Running: bash ai-server-manager.sh ollama[/dim]")
                 success, output = self.system_mgr.run_ai_server_command('ollama')
                 self._show_result(output_widget, success, "Start Ollama", output)
 
@@ -145,33 +159,33 @@ class SystemManagementUI(Container):
                 self._show_result(output_widget, success, "Stop Ollama", output)
 
             elif button_id == "btn-enable-autosuspend":
-                output_widget.update("[yellow]Enabling Auto-Suspend...[/yellow]")
+                output_widget.update("[yellow]Enabling Auto-Suspend...[/yellow]\n\n[dim]Running: systemctl enable ai-auto-suspend && systemctl start ai-auto-suspend[/dim]")
                 success1, output1 = self.system_mgr.enable_service('ai-auto-suspend')
                 success2, output2 = self.system_mgr.start_service('ai-auto-suspend')
                 self._show_result(output_widget, success1 and success2, "Enable Auto-Suspend",
                                 output1 + "\n" + output2)
 
             elif button_id == "btn-disable-autosuspend":
-                output_widget.update("[yellow]Disabling Auto-Suspend...[/yellow]")
+                output_widget.update("[yellow]Disabling Auto-Suspend...[/yellow]\n\n[dim]Running: systemctl stop ai-auto-suspend && systemctl disable ai-auto-suspend[/dim]")
                 success1, output1 = self.system_mgr.stop_service('ai-auto-suspend')
                 success2, output2 = self.system_mgr.disable_service('ai-auto-suspend')
                 self._show_result(output_widget, success1 and success2, "Disable Auto-Suspend",
                                 output1 + "\n" + output2)
 
             elif button_id == "btn-stay-1h":
-                output_widget.update("[yellow]Activating stay-awake for 1 hour...[/yellow]")
+                output_widget.update("[yellow]Activating stay-awake for 1 hour...[/yellow]\n\n[dim]Sending HTTP request to stay-awake server[/dim]")
                 success, output = self.system_mgr.activate_stay_awake(1)
-                self._show_result(output_widget, success, "Stay Awake", output)
+                self._show_result(output_widget, success, "Stay Awake (1 hour)", output)
 
             elif button_id == "btn-stay-2h":
-                output_widget.update("[yellow]Activating stay-awake for 2 hours...[/yellow]")
+                output_widget.update("[yellow]Activating stay-awake for 2 hours...[/yellow]\n\n[dim]Sending HTTP request to stay-awake server[/dim]")
                 success, output = self.system_mgr.activate_stay_awake(2)
-                self._show_result(output_widget, success, "Stay Awake", output)
+                self._show_result(output_widget, success, "Stay Awake (2 hours)", output)
 
             elif button_id == "btn-stay-4h":
-                output_widget.update("[yellow]Activating stay-awake for 4 hours...[/yellow]")
+                output_widget.update("[yellow]Activating stay-awake for 4 hours...[/yellow]\n\n[dim]Sending HTTP request to stay-awake server[/dim]")
                 success, output = self.system_mgr.activate_stay_awake(4)
-                self._show_result(output_widget, success, "Stay Awake", output)
+                self._show_result(output_widget, success, "Stay Awake (4 hours)", output)
 
             elif button_id == "btn-check-status":
                 output_widget.update("[yellow]Checking status...[/yellow]")
