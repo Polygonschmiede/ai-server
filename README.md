@@ -61,21 +61,181 @@ Both servers:
   - CPU mode: Any x86_64 system
   - GPU mode: NVIDIA GPU with compatible drivers (optional)
 
+## Getting Started
+
+This guide will take you from a fresh Ubuntu installation to a running AI server in just a few steps.
+
+### Complete Workflow (Start to Finish)
+
+If you're starting with a fresh Ubuntu 24.04 installation, follow these steps:
+
+```bash
+# 1. Update system and install Git
+sudo apt update
+sudo apt install -y git
+
+# 2. Clone this repository
+git clone https://github.com/Polygonschmiede/ai-server.git
+cd ai-server
+
+# 3. Make scripts executable
+chmod +x install.sh install-ollama.sh ai-server-manager.sh verify-setup.sh
+
+# 4. Install LocalAI (includes Docker, NVIDIA toolkit, etc.)
+sudo bash install.sh
+
+# 5. Install Ollama (optional, but recommended)
+sudo bash install-ollama.sh
+
+# 6. Verify installation
+./verify-setup.sh
+
+# 7. Start both services in parallel
+./ai-server-manager.sh both
+
+# 8. Pull some models for Ollama
+./ai-server-manager.sh pull llama3.2
+./ai-server-manager.sh pull mistral
+
+# Done! Access your services:
+# - LocalAI:  http://localhost:8080
+# - Ollama:   http://localhost:11434
+# - WebUI:    http://localhost:3000
+```
+
+### Step-by-Step Guide
+
+#### Step 1: Install Git (if not already installed)
+
+On a fresh Ubuntu installation, you may need to install Git first:
+
+```bash
+sudo apt update
+sudo apt install -y git
+```
+
+#### Step 2: Clone the Repository
+
+Download the installation scripts to your Linux machine:
+
+```bash
+# Clone the repository
+git clone https://github.com/Polygonschmiede/ai-server.git
+
+# Navigate into the directory
+cd ai-server
+```
+
+#### Step 3: Make Scripts Executable
+
+Ensure all scripts have execute permissions:
+
+```bash
+chmod +x install.sh install-ollama.sh ai-server-manager.sh verify-setup.sh
+```
+
+#### Step 4: Run the Installation
+
+Now you're ready to install! Choose one of the options below based on your needs.
+
+### What Happens During Installation?
+
+The installation scripts will automatically:
+
+**LocalAI (install.sh):**
+1. Install Docker CE and Docker Compose
+2. Set up NVIDIA Container Toolkit (if GPU detected)
+3. Configure Docker to use NVIDIA runtime
+4. Create systemd services for LocalAI
+5. Set up auto-suspend and stay-awake services
+6. Configure UFW firewall rules
+7. Optional: Harden SSH security
+8. Create directory structure in `/opt/localai`
+9. Download and start LocalAI container
+
+**Ollama (install-ollama.sh):**
+1. Check for existing Docker installation
+2. Detect NVIDIA GPU (if available)
+3. Create systemd service for Ollama
+4. Set up Open WebUI container
+5. Configure firewall rules for ports 11434 and 3000
+6. Create directory structure in `/opt/ollama`
+7. Download and start Ollama and WebUI containers
+
+**Total Installation Time:**
+- LocalAI: ~5-10 minutes (depending on internet speed)
+- Ollama: ~3-5 minutes
+- First model download: ~2-5 minutes (depends on model size)
+
+### First-Time Setup Tips
+
+**If you have an NVIDIA GPU:**
+- Make sure NVIDIA drivers are installed: `nvidia-smi` should work
+- The installer will automatically set up GPU acceleration
+- No manual configuration needed
+
+**If you don't have a GPU:**
+- Use `--cpu-only` flag for both installers
+- Performance will be slower but still functional
+- Great for testing and small models
+
+**SSH Access:**
+- The installer can harden SSH security (disable password auth)
+- Only do this if you have SSH keys set up
+- If unsure, skip SSH hardening during installation
+
 ## Quick Start
 
-### Basic Installation (GPU Mode)
+### Option A: LocalAI Only
+
+Install LocalAI with GPU support (default):
 
 ```bash
 sudo bash install.sh
 ```
 
-### CPU-Only Installation
+Or with CPU-only mode:
 
 ```bash
 sudo bash install.sh --cpu-only --non-interactive
 ```
 
-### Custom Configuration
+### Option B: Ollama Only
+
+Install Ollama with Open WebUI:
+
+```bash
+# Make sure Docker is installed (run Option A first, or install Docker manually)
+sudo bash install-ollama.sh
+```
+
+Or with CPU-only mode:
+
+```bash
+sudo bash install-ollama.sh --cpu-only --non-interactive
+```
+
+### Option C: Both LocalAI and Ollama (Recommended)
+
+Install both services for maximum flexibility:
+
+```bash
+# 1. Install LocalAI first (includes Docker setup)
+sudo bash install.sh
+
+# 2. Then install Ollama
+sudo bash install-ollama.sh
+
+# 3. Verify everything is working
+./verify-setup.sh
+
+# 4. Start both in parallel mode
+./ai-server-manager.sh both
+```
+
+### Custom Configuration Example
+
+LocalAI with custom settings:
 
 ```bash
 sudo bash install.sh \
@@ -83,6 +243,15 @@ sudo bash install.sh \
   --localai-port 8080 \
   --wait-minutes 30 \
   --harden-ssh
+```
+
+Ollama with custom ports:
+
+```bash
+sudo bash install-ollama.sh \
+  --ollama-port 11434 \
+  --webui-port 3000 \
+  --models-path /data/ollama-models
 ```
 
 ## Configuration Options
@@ -290,6 +459,133 @@ bats tests
 
 # Smoke test without GPU
 bash install.sh --non-interactive --cpu-only
+```
+
+## FAQ - First Installation
+
+### How do I get these scripts on my Linux machine?
+
+```bash
+# Install Git first
+sudo apt update && sudo apt install -y git
+
+# Clone the repository
+git clone https://github.com/Polygonschmiede/ai-server.git
+cd ai-server
+
+# Make scripts executable
+chmod +x *.sh
+
+# Run installation
+sudo bash install.sh
+```
+
+### Do I need to download anything else manually?
+
+No! The scripts will automatically download everything needed:
+- Docker and Docker Compose
+- NVIDIA Container Toolkit (if GPU detected)
+- LocalAI container image
+- Ollama container image
+- Open WebUI container image
+
+Just run the scripts and wait for completion.
+
+### Which installation order should I use?
+
+**Recommended order:**
+1. First: `sudo bash install.sh` (installs Docker + LocalAI)
+2. Then: `sudo bash install-ollama.sh` (adds Ollama)
+3. Verify: `./verify-setup.sh`
+
+**Why this order?**
+- `install.sh` sets up Docker and NVIDIA toolkit
+- `install-ollama.sh` reuses the existing Docker installation
+- This avoids duplicate work and potential conflicts
+
+### Can I run this on a fresh Ubuntu install?
+
+Yes! That's exactly what it's designed for. Just make sure you have:
+- Ubuntu 24.04 (recommended) or similar version
+- Internet connection
+- Sudo/root access
+
+The scripts will handle everything else.
+
+### What if I already have Docker installed?
+
+No problem! The scripts detect existing installations:
+- Existing Docker: Will be reused (not reinstalled)
+- Existing LocalAI/Ollama: You'll be asked if you want to reinstall or keep
+- Use `--repair` flag to fix broken installations without reinstalling
+
+### Do I need an NVIDIA GPU?
+
+No, but it's recommended for better performance:
+- **With GPU**: Use default installation (GPU mode)
+- **Without GPU**: Add `--cpu-only` flag to both installers
+- CPU mode works fine for testing and smaller models
+
+### How much disk space do I need?
+
+**Minimum requirements:**
+- System/Docker: ~5 GB
+- LocalAI image: ~2 GB
+- Ollama image: ~1 GB
+- Models: 1-10 GB each (depends on model size)
+
+**Recommended:** At least 50 GB free space for comfortable use with multiple models.
+
+### Can I change ports after installation?
+
+Yes, use the `--repair` flag with new port settings:
+
+```bash
+# Change LocalAI port
+sudo bash install.sh --repair --localai-port 8090
+
+# Change Ollama ports
+sudo bash install-ollama.sh --repair --ollama-port 11435 --webui-port 3001
+```
+
+### How do I update to the latest version?
+
+```bash
+# Navigate to repository directory
+cd ai-server
+
+# Pull latest changes
+git pull
+
+# Re-run installation in repair mode
+sudo bash install.sh --repair
+sudo bash install-ollama.sh --repair
+```
+
+### Where are my models stored?
+
+**LocalAI models:** `/opt/localai/models`
+**Ollama models:** `/opt/ollama/models`
+
+These directories are preserved during reinstallation and uninstallation.
+
+### How do I completely remove everything?
+
+```bash
+# Run installers without --non-interactive
+# They will detect existing installations and offer removal
+sudo bash install.sh
+sudo bash install-ollama.sh
+
+# Or use --non-interactive for automatic removal
+sudo bash install.sh --non-interactive
+sudo bash install-ollama.sh --non-interactive
+```
+
+Models are preserved by default. To remove models too:
+```bash
+sudo rm -rf /opt/localai
+sudo rm -rf /opt/ollama
 ```
 
 ## Troubleshooting
