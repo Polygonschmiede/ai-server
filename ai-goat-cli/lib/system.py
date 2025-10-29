@@ -140,3 +140,94 @@ class SystemManager:
             return result.stdout + result.stderr
         except Exception as e:
             return f"Error getting container logs: {e}"
+
+    def enable_service(self, service: str) -> tuple[bool, str]:
+        """Enable a systemd service"""
+        try:
+            result = subprocess.run(
+                ['sudo', 'systemctl', 'enable', f'{service}.service'],
+                capture_output=True,
+                text=True
+            )
+            return result.returncode == 0, result.stdout + result.stderr
+        except Exception as e:
+            return False, f"Error enabling service: {e}"
+
+    def disable_service(self, service: str) -> tuple[bool, str]:
+        """Disable a systemd service"""
+        try:
+            result = subprocess.run(
+                ['sudo', 'systemctl', 'disable', f'{service}.service'],
+                capture_output=True,
+                text=True
+            )
+            return result.returncode == 0, result.stdout + result.stderr
+        except Exception as e:
+            return False, f"Error disabling service: {e}"
+
+    def get_service_status(self, service: str) -> Dict[str, Any]:
+        """Get detailed service status"""
+        try:
+            # Check if service is active
+            result = subprocess.run(
+                ['systemctl', 'is-active', f'{service}.service'],
+                capture_output=True,
+                text=True
+            )
+            is_active = result.stdout.strip() == 'active'
+
+            # Check if service is enabled
+            result = subprocess.run(
+                ['systemctl', 'is-enabled', f'{service}.service'],
+                capture_output=True,
+                text=True
+            )
+            is_enabled = result.stdout.strip() == 'enabled'
+
+            return {
+                'active': is_active,
+                'enabled': is_enabled,
+                'exists': True
+            }
+        except Exception:
+            return {
+                'active': False,
+                'enabled': False,
+                'exists': False
+            }
+
+    def install_auto_suspend(self) -> tuple[bool, str]:
+        """Install auto-suspend system"""
+        return self.run_installer('install-auto-suspend.sh')
+
+    def activate_stay_awake(self, hours: int = 1) -> tuple[bool, str]:
+        """Activate stay-awake via HTTP request"""
+        try:
+            import urllib.request
+            seconds = hours * 3600
+            url = f"http://localhost:9876/stay?s={seconds}"
+
+            req = urllib.request.Request(url)
+            with urllib.request.urlopen(req, timeout=5) as response:
+                result = response.read().decode('utf-8')
+                return True, result
+        except Exception as e:
+            return False, f"Error activating stay-awake: {e}"
+
+    def run_ai_server_command(self, command: str) -> tuple[bool, str]:
+        """Run ai-server-manager.sh command"""
+        script_path = os.path.join(self.base_dir, 'ai-server-manager.sh')
+
+        if not os.path.exists(script_path):
+            return False, f"Script not found: {script_path}"
+
+        try:
+            result = subprocess.run(
+                ['bash', script_path, command],
+                capture_output=True,
+                text=True,
+                timeout=300
+            )
+            return result.returncode == 0, result.stdout + result.stderr
+        except Exception as e:
+            return False, f"Error running command: {e}"

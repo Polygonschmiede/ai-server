@@ -1,0 +1,27 @@
+[Unit]
+Description=Stay-Awake HTTP Server
+Documentation=https://github.com/Polygonschmiede/ai-server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/ai-server
+ExecStart=/usr/bin/python3 /opt/ai-server/stay-awake-server.py
+Restart=always
+RestartSec=10
+
+# Security settings
+PrivateTmp=yes
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/run/ai-nodectl
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=stay-awake
+
+[Install]
+WantedBy=multi-user.target
