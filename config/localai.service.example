@@ -1,0 +1,33 @@
+# Example SystemD service file for LocalAI
+# This file is created automatically by install.sh
+# Location: /etc/systemd/system/localai.service
+
+[Unit]
+Description=LocalAI via Docker Compose
+Requires=docker.service
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/localai
+Environment=COMPOSE_PROJECT_NAME=localai
+
+# Pull images before starting (silent mode)
+ExecStartPre=/usr/bin/docker compose pull --quiet
+
+# Start containers in detached mode
+# Containers use restart: unless-stopped policy
+ExecStart=/usr/bin/docker compose up -d
+
+# Stop containers on service stop
+ExecStop=/usr/bin/docker compose down
+
+# Keep service as "active" even after ExecStart completes
+RemainAfterExit=yes
+
+# No timeout for image pulls
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

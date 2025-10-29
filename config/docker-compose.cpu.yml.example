@@ -1,0 +1,27 @@
+# Example docker-compose.yml for LocalAI with CPU-only mode
+# This file is created automatically by install.sh with --cpu-only flag
+# Location: /opt/localai/docker-compose.yml
+
+services:
+  localai:
+    image: localai/localai:latest
+    container_name: localai
+    restart: unless-stopped
+
+    ports:
+      - "8080:8080"
+
+    environment:
+      - DEBUG=false
+      - THREADS=4
+      - MODELS_PATH=/models
+
+    volumes:
+      - /opt/localai/models:/models
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/readyz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s

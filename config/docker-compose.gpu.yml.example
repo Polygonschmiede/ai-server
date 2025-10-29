@@ -1,0 +1,38 @@
+# Example docker-compose.yml for LocalAI with GPU support
+# This file is created automatically by install.sh
+# Location: /opt/localai/docker-compose.yml
+
+services:
+  localai:
+    image: localai/localai:latest-gpu-nvidia-cuda-12
+    container_name: localai
+    restart: unless-stopped
+
+    # NVIDIA GPU support
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+    ports:
+      - "8080:8080"
+
+    environment:
+      - DEBUG=false
+      - THREADS=4
+      - MODELS_PATH=/models
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+    volumes:
+      - /opt/localai/models:/models
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/readyz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
