@@ -82,6 +82,25 @@ log() { echo -e "\033[1;32m[+] $*\033[0m"; }
 warn(){ echo -e "\033[1;33m[!] $*\033[0m"; }
 err() { echo -e "\033[1;31m[✗] $*\033[0m" >&2; }
 die() { err "$*"; exit 1; }
+info() { echo -e "\033[1;34m[INFO] $*\033[0m"; }
+success() { echo -e "\033[1;32m[✓] $*\033[0m"; }
+
+# Spinner for long-running operations
+spinner() {
+  local pid=$1
+  local msg="${2:-Arbeite}"
+  local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+  local i=0
+  while kill -0 "$pid" 2>/dev/null; do
+    i=$(( (i+1) %10 ))
+    printf "\r\033[1;36m[${spin:$i:1}] %s...\033[0m" "$msg"
+    sleep 0.1
+  done
+  wait "$pid"
+  local status=$?
+  printf "\r\033[K"
+  return $status
+}
 
 require_cmd() { command -v "$1" >/dev/null 2>&1 || die "Benötigtes Kommando fehlt: $1"; }
 
@@ -397,8 +416,14 @@ ensure_timezone() {
 
 install_base_packages() {
   local packages=(ufw curl jq git neovim less unzip ca-certificates gnupg lsb-release net-tools iproute2 sysstat netcat-openbsd ethtool)
-  log "Installiere Basis-Pakete…"
-  sudo apt-get install -y "${packages[@]}"
+  log "Installiere Basis-Pakete: ${packages[*]}"
+  info "Dies kann einige Minuten dauern..."
+  if sudo apt-get install -y "${packages[@]}"; then
+    success "Basis-Pakete erfolgreich installiert"
+  else
+    err "Fehler bei der Installation der Basis-Pakete"
+    return 1
+  fi
 }
 
 configure_firewall() {
@@ -413,18 +438,31 @@ configure_firewall() {
   log "Konfiguriere UFW-Firewall…"
   local status
   status="$(sudo ufw status | head -n1 || true)"
-  sudo ufw allow 22/tcp >/dev/null 2>&1 || true
-  sudo ufw allow "${LOCALAI_PORT}/tcp" >/dev/null 2>&1 || true
+
+  info "Erlaube Port 22 (SSH)"
+  sudo ufw allow 22/tcp || warn "Konnte Port 22 nicht freigeben"
+
+  info "Erlaube Port ${LOCALAI_PORT} (LocalAI)"
+  sudo ufw allow "${LOCALAI_PORT}/tcp" || warn "Konnte Port ${LOCALAI_PORT} nicht freigeben"
+
   if [[ "${ENABLE_STAY_AWAKE}" == "true" ]]; then
-    sudo ufw allow "${STAY_AWAKE_PORT}/tcp" >/dev/null 2>&1 || true
+    info "Erlaube Port ${STAY_AWAKE_PORT} (Stay-Awake)"
+    sudo ufw allow "${STAY_AWAKE_PORT}/tcp" || warn "Konnte Port ${STAY_AWAKE_PORT} nicht freigeben"
   fi
-  sudo ufw default deny incoming >/dev/null 2>&1 || true
-  sudo ufw default allow outgoing >/dev/null 2>&1 || true
+
+  info "Setze Firewall-Regeln: deny incoming, allow outgoing"
+  sudo ufw default deny incoming || warn "Konnte default deny incoming nicht setzen"
+  sudo ufw default allow outgoing || warn "Konnte default allow outgoing nicht setzen"
+
   if [[ "${status}" == "Status: active" ]]; then
-    log "UFW war bereits aktiv – Regeln aktualisiert."
+    success "UFW war bereits aktiv – Regeln aktualisiert."
   else
-    log "Aktiviere UFW…"
-    sudo ufw --force enable >/dev/null 2>&1 || warn "UFW konnte nicht aktiviert werden."
+    info "Aktiviere UFW…"
+    if sudo ufw --force enable; then
+      success "UFW erfolgreich aktiviert"
+    else
+      warn "UFW konnte nicht aktiviert werden."
+    fi
   fi
 }
 
@@ -695,15 +733,17 @@ BASH
 
 configure_auto_suspend_service() {
   if [[ "${ENABLE_AUTO_SUSPEND}" != "true" ]]; then
+    info "Auto-Suspend deaktiviert - überspringe"
     disable_service "${MANAGED_SERVICE_AUTO_SUSPEND}"
     remove_managed_unit "/etc/systemd/system/${MANAGED_SERVICE_AUTO_SUSPEND}" "Managed by LocalAI Installer"
     remove_managed_file "${MANAGED_SCRIPT_AUTO_SUSPEND}"
     return
   fi
+  info "Schreibe Auto-Suspend Skript..."
   write_auto_suspend_script
   local ports_string
   ports_string="$(build_llm_ports_string)"
-  log "Aktualisiere systemd Service ${MANAGED_SERVICE_AUTO_SUSPEND}…"
+  info "Erstelle systemd Service ${MANAGED_SERVICE_AUTO_SUSPEND}..."
   sudo tee "/etc/systemd/system/${MANAGED_SERVICE_AUTO_SUSPEND}" >/dev/null <<SERVICE
 [Unit]
 Description=AI Node Auto-Suspend Watcher
@@ -730,19 +770,26 @@ Environment="STAY_AWAKE_FILE=/run/ai-nodectl/stay_awake_until"
 [Install]
 WantedBy=multi-user.target
 SERVICE
+  info "Aktiviere Auto-Suspend Service..."
   sudo systemctl daemon-reload
-  sudo systemctl enable --now "${MANAGED_SERVICE_AUTO_SUSPEND}"
+  if sudo systemctl enable --now "${MANAGED_SERVICE_AUTO_SUSPEND}"; then
+    success "Auto-Suspend Service aktiviert und gestartet"
+  else
+    warn "Fehler beim Aktivieren des Auto-Suspend Service"
+  fi
 }
 
 configure_stay_awake_service() {
   if [[ "${ENABLE_STAY_AWAKE}" != "true" ]]; then
+    info "Stay-Awake deaktiviert - überspringe"
     disable_service "${MANAGED_SERVICE_STAY_AWAKE}"
     remove_managed_unit "/etc/systemd/system/${MANAGED_SERVICE_STAY_AWAKE}" "Managed by LocalAI Installer"
     remove_managed_file "${MANAGED_SCRIPT_STAY_AWAKE}"
     return
   fi
+  info "Schreibe Stay-Awake Skript..."
   write_stay_awake_script
-  log "Aktualisiere systemd Service ${MANAGED_SERVICE_STAY_AWAKE}…"
+  info "Erstelle systemd Service ${MANAGED_SERVICE_STAY_AWAKE}..."
   sudo tee "/etc/systemd/system/${MANAGED_SERVICE_STAY_AWAKE}" >/dev/null <<SERVICE
 [Unit]
 Description=AI Stay-Awake Tiny HTTP
@@ -761,8 +808,13 @@ Environment="STATE_DIR=/run/ai-nodectl"
 [Install]
 WantedBy=multi-user.target
 SERVICE
+  info "Aktiviere Stay-Awake Service..."
   sudo systemctl daemon-reload
-  sudo systemctl enable --now "${MANAGED_SERVICE_STAY_AWAKE}"
+  if sudo systemctl enable --now "${MANAGED_SERVICE_STAY_AWAKE}"; then
+    success "Stay-Awake Service aktiviert und gestartet"
+  else
+    warn "Fehler beim Aktivieren des Stay-Awake Service"
+  fi
 }
 
 detect_wol_interface() {
@@ -780,20 +832,27 @@ detect_wol_interface() {
 
 configure_wol() {
   if [[ "${ENABLE_WOL}" != "true" ]]; then
+    info "Wake-on-LAN deaktiviert - überspringe"
     return
   fi
   if ! command -v ethtool >/dev/null 2>&1; then
     warn "ethtool nicht verfügbar – WOL-Konfiguration übersprungen."
     return
   fi
+  info "Erkenne Netzwerk-Interface..."
   detect_wol_interface
   if [[ -z "${WOL_INTERFACE}" ]]; then
     warn "Kein Interface für WOL angegeben – überspringe."
     return
   fi
-  log "Aktiviere Wake-on-LAN für Interface ${WOL_INTERFACE}…"
-  sudo ethtool -s "${WOL_INTERFACE}" wol g || warn "Konnte WOL für ${WOL_INTERFACE} nicht setzen."
+  info "Aktiviere Wake-on-LAN für Interface ${WOL_INTERFACE}..."
+  if sudo ethtool -s "${WOL_INTERFACE}" wol g; then
+    success "WOL für ${WOL_INTERFACE} aktiviert"
+  else
+    warn "Konnte WOL für ${WOL_INTERFACE} nicht setzen."
+  fi
   if [[ ! -f "${MANAGED_SERVICE_WOL_TEMPLATE}" ]]; then
+    info "Erstelle WOL systemd Template..."
     sudo tee "${MANAGED_SERVICE_WOL_TEMPLATE}" >/dev/null <<'UNIT'
 [Unit]
 Description=Enable Wake-on-LAN on %i
@@ -807,9 +866,15 @@ ExecStart=/usr/sbin/ethtool -s %i wol g
 [Install]
 WantedBy=multi-user.target
 UNIT
+    success "WOL systemd Template erstellt"
   fi
+  info "Aktiviere WOL Service für ${WOL_INTERFACE}..."
   sudo systemctl daemon-reload
-  sudo systemctl enable --now "wol@${WOL_INTERFACE}.service" || warn "Konnte wol@${WOL_INTERFACE}.service nicht aktivieren."
+  if sudo systemctl enable --now "wol@${WOL_INTERFACE}.service"; then
+    success "WOL Service aktiviert und gestartet"
+  else
+    warn "Konnte wol@${WOL_INTERFACE}.service nicht aktivieren."
+  fi
 }
 
 handle_existing_installation() {
@@ -889,24 +954,80 @@ done
 handle_existing_installation
 
 # --------------------------
+# Start-Banner
+# --------------------------
+clear
+echo "=========================================================================="
+echo "              LocalAI Installer für Ubuntu 24.04 + NVIDIA"
+echo "=========================================================================="
+echo ""
+info "Konfiguration:"
+echo "  • Modus: ${MODE}"
+echo "  • LocalAI Port: ${LOCALAI_PORT}"
+echo "  • Modelle-Pfad: ${MODELS_PATH}"
+echo "  • Auto-Suspend: ${ENABLE_AUTO_SUSPEND} (${WAIT_MINUTES} Min Idle)"
+echo "  • Stay-Awake: ${ENABLE_STAY_AWAKE} (Port ${STAY_AWAKE_PORT})"
+echo "  • Wake-on-LAN: ${ENABLE_WOL}"
+echo "  • Firewall: ${CONFIGURE_FIREWALL}"
+echo ""
+info "Die Installation wird nun gestartet. Dies kann 5-15 Minuten dauern."
+info "Sie erhalten detailliertes Feedback über jeden Schritt."
+echo ""
+sleep 2
+
+# --------------------------
 # Checks
 # --------------------------
+log "==================== System-Checks ===================="
 [[ "$(id -u)" -ne 0 ]] && warn "Skript läuft nicht als root – verwende sudo für Systemänderungen."
+
+info "Prüfe System-Voraussetzungen..."
 require_cmd lsb_release
 DISTRO="$(lsb_release -is || true)"
 CODENAME="$(lsb_release -cs || true)"
 ARCH="$(dpkg --print-architecture)"
 
-[[ "${DISTRO}" != "Ubuntu" ]] && die "Nur Ubuntu wird unterstützt (gefunden: ${DISTRO})."
-[[ "${CODENAME}" != "noble" ]] && warn "Empfohlen: Ubuntu 24.04 (Noble). Gefunden: ${CODENAME}. Ich versuche es trotzdem."
-[[ "${ARCH}" != "amd64" ]] && die "Dieses Skript ist für x86_64/amd64 gebaut (gefunden: ${ARCH})."
+info "Erkanntes System:"
+echo "  • Distribution: ${DISTRO}"
+echo "  • Codename: ${CODENAME}"
+echo "  • Architektur: ${ARCH}"
+echo ""
+
+if [[ "${DISTRO}" != "Ubuntu" ]]; then
+  die "Nur Ubuntu wird unterstützt (gefunden: ${DISTRO})."
+fi
+
+if [[ "${CODENAME}" != "noble" ]]; then
+  warn "Empfohlen: Ubuntu 24.04 (Noble). Gefunden: ${CODENAME}. Ich versuche es trotzdem."
+else
+  success "Ubuntu 24.04 (Noble) erkannt - perfekt!"
+fi
+
+if [[ "${ARCH}" != "amd64" ]]; then
+  die "Dieses Skript ist für x86_64/amd64 gebaut (gefunden: ${ARCH})."
+else
+  success "Architektur amd64 - kompatibel!"
+fi
 
 # --------------------------
 # Pakete & Tools
 # --------------------------
-log "APT-Grundpakete installieren…"
-sudo apt-get update -y
+echo ""
+log "==================== APT-Repository aktualisieren ===================="
+info "Aktualisiere Paketlisten..."
+if sudo apt-get update -y; then
+  success "Paketlisten aktualisiert"
+else
+  err "Fehler beim Aktualisieren der Paketlisten"
+  exit 1
+fi
+
+echo ""
+log "==================== Basis-Pakete installieren ===================="
 install_base_packages
+
+echo ""
+log "==================== System-Konfiguration ===================="
 ensure_timezone
 maybe_harden_ssh
 configure_firewall
@@ -914,39 +1035,89 @@ configure_firewall
 # --------------------------
 # Docker-Repository einrichten
 # --------------------------
-log "Docker APT-Repository einrichten…"
+echo ""
+log "==================== Docker-Repository einrichten ===================="
+info "Erstelle Keyring-Verzeichnis..."
 sudo install -m 0755 -d /etc/apt/keyrings
+
 if [[ ! -f /etc/apt/keyrings/docker.gpg ]]; then
-  curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
-    | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-  sudo chmod a+r /etc/apt/keyrings/docker.gpg
+  info "Lade Docker GPG-Schlüssel herunter..."
+  if curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg; then
+    sudo chmod a+r /etc/apt/keyrings/docker.gpg
+    success "Docker GPG-Schlüssel installiert"
+  else
+    die "Fehler beim Herunterladen des Docker GPG-Schlüssels"
+  fi
+else
+  success "Docker GPG-Schlüssel bereits vorhanden"
 fi
 
+info "Füge Docker APT-Repository hinzu..."
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
 https://download.docker.com/linux/ubuntu ${CODENAME} stable" \
 | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
+success "Docker-Repository hinzugefügt"
 
-sudo apt-get update -y
-log "Docker CE + Compose installieren…"
-sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+info "Aktualisiere Paketlisten für Docker..."
+if sudo apt-get update -y; then
+  success "Paketlisten aktualisiert"
+else
+  err "Fehler beim Aktualisieren der Paketlisten"
+  exit 1
+fi
 
+echo ""
+log "==================== Docker CE + Compose installieren ===================="
+info "Installiere: docker-ce, docker-ce-cli, containerd.io, docker-buildx-plugin, docker-compose-plugin"
+info "Dies kann mehrere Minuten dauern..."
+if sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin; then
+  success "Docker erfolgreich installiert"
+else
+  err "Fehler bei der Docker-Installation"
+  exit 1
+fi
+
+info "Prüfe Docker-Installation..."
 DOCKER_CMD="$(docker_bin)"
-[[ -z "${DOCKER_CMD}" ]] && die "docker konnte nach der Installation nicht gefunden werden."
+if [[ -z "${DOCKER_CMD}" ]]; then
+  die "docker konnte nach der Installation nicht gefunden werden."
+else
+  success "Docker-Binary gefunden: ${DOCKER_CMD}"
+fi
 
 # --------------------------
 # Docker-Dienste & Gruppe
 # --------------------------
-log "Docker-Dienste aktivieren…"
+echo ""
+log "==================== Docker-Dienste aktivieren ===================="
+info "Lade systemd-Konfiguration neu..."
 sudo systemctl daemon-reload
-# Socket aktivieren (fd://)
+
+info "Aktiviere Docker Socket..."
 sudo systemctl unmask docker.socket || true
-sudo systemctl enable --now docker.socket
-sudo systemctl enable --now docker
+if sudo systemctl enable --now docker.socket; then
+  success "Docker Socket aktiviert"
+else
+  warn "Fehler beim Aktivieren des Docker Socket"
+fi
+
+info "Aktiviere Docker Service..."
+if sudo systemctl enable --now docker; then
+  success "Docker Service aktiviert und gestartet"
+else
+  err "Fehler beim Aktivieren des Docker Service"
+  exit 1
+fi
 
 # Nutzer in docker-Gruppe (falls vorhanden)
 if [[ -n "${SUDO_USER:-}" ]]; then
-  log "User ${SUDO_USER} zur docker-Gruppe hinzufügen (für spätere Logins)…"
-  sudo usermod -aG docker "${SUDO_USER}" || true
+  info "Füge User ${SUDO_USER} zur docker-Gruppe hinzu..."
+  if sudo usermod -aG docker "${SUDO_USER}"; then
+    success "User ${SUDO_USER} zur docker-Gruppe hinzugefügt"
+    warn "WICHTIG: ${SUDO_USER} muss sich neu anmelden, damit die Gruppenänderung wirksam wird!"
+  else
+    warn "Konnte User nicht zur docker-Gruppe hinzufügen"
+  fi
 else
   warn "Kein SUDO_USER gesetzt – Überspringe Gruppenänderung."
 fi
@@ -954,47 +1125,94 @@ fi
 # --------------------------
 # NVIDIA Toolkit (falls GPU)
 # --------------------------
+echo ""
+log "==================== NVIDIA GPU-Unterstützung prüfen ===================="
 GPU_AVAILABLE="false"
 if [[ "${MODE}" == "gpu" ]]; then
   if command -v nvidia-smi >/dev/null 2>&1; then
+    success "nvidia-smi gefunden - GPU-Unterstützung verfügbar"
     GPU_AVAILABLE="true"
+    info "GPU-Informationen:"
+    nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader 2>/dev/null || true
   else
     warn "nvidia-smi nicht gefunden – versuche NVIDIA Container Toolkit zu installieren."
+
     # Repo einrichten
     if [[ ! -f /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg ]]; then
-      curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
-        | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+      info "Lade NVIDIA Container Toolkit GPG-Schlüssel..."
+      if curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
+        | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg; then
+        success "NVIDIA GPG-Schlüssel installiert"
+      else
+        warn "Fehler beim Herunterladen des NVIDIA GPG-Schlüssels"
+      fi
     fi
+
+    info "Füge NVIDIA Container Toolkit Repository hinzu..."
     curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
       | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#' \
       | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list >/dev/null
+    success "NVIDIA Repository hinzugefügt"
 
+    info "Aktualisiere Paketlisten..."
     sudo apt-get update -y
-    sudo apt-get install -y nvidia-container-toolkit
+
+    info "Installiere NVIDIA Container Toolkit..."
+    if sudo apt-get install -y nvidia-container-toolkit; then
+      success "NVIDIA Container Toolkit installiert"
+    else
+      warn "Fehler bei der Installation des NVIDIA Container Toolkit"
+    fi
 
     # Docker-Runtime konfigurieren
-    sudo nvidia-ctk runtime configure --runtime=docker --set-as-default=true
-    sudo systemctl restart docker
+    info "Konfiguriere Docker für NVIDIA Runtime..."
+    if sudo nvidia-ctk runtime configure --runtime=docker --set-as-default=true; then
+      success "Docker für NVIDIA konfiguriert"
+    else
+      warn "Fehler bei der NVIDIA Runtime-Konfiguration"
+    fi
+
+    info "Starte Docker neu..."
+    if sudo systemctl restart docker; then
+      success "Docker neu gestartet"
+    else
+      warn "Fehler beim Neustart von Docker"
+    fi
 
     # Finaler Check
     if command -v nvidia-smi >/dev/null 2>&1; then
+      success "nvidia-smi jetzt verfügbar - GPU-Unterstützung aktiviert"
       GPU_AVAILABLE="true"
+      nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader 2>/dev/null || true
     else
       warn "nvidia-smi weiterhin nicht verfügbar. GPU-Modus wird NICHT erzwungen."
+      warn "Installation wird mit CPU-only Modus fortgesetzt."
       GPU_AVAILABLE="false"
     fi
   fi
+else
+  info "CPU-only Modus gewählt - überspringe GPU-Konfiguration"
 fi
 
 # --------------------------
 # LocalAI Verzeichnisse
 # --------------------------
-log "Verzeichnisse anlegen: ${LOCALAI_DIR} & ${MODELS_PATH}"
-sudo mkdir -p "${LOCALAI_DIR}" "${MODELS_PATH}"
+echo ""
+log "==================== LocalAI Verzeichnisse anlegen ===================="
+info "Erstelle Verzeichnisse: ${LOCALAI_DIR} & ${MODELS_PATH}"
+if sudo mkdir -p "${LOCALAI_DIR}" "${MODELS_PATH}"; then
+  success "Verzeichnisse erfolgreich angelegt"
+  info "  - LocalAI-Konfiguration: ${LOCALAI_DIR}"
+  info "  - Modelle: ${MODELS_PATH}"
+else
+  die "Fehler beim Anlegen der Verzeichnisse"
+fi
 
 # --------------------------
 # docker-compose.yml schreiben
 # --------------------------
+echo ""
+log "==================== docker-compose.yml erstellen ===================="
 if [[ "${MODE}" == "gpu" && "${GPU_AVAILABLE}" == "true" ]]; then
   IMAGE="localai/localai:latest-gpu-nvidia-cuda-12"
   GPU_YAML='
@@ -1004,13 +1222,14 @@ if [[ "${MODE}" == "gpu" && "${GPU_AVAILABLE}" == "true" ]]; then
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
 '
-  log "Schreibe docker-compose.yml (GPU: ${IMAGE})…"
+  info "Verwende GPU-Image: ${IMAGE}"
 else
   IMAGE="localai/localai:latest"
   GPU_YAML=''
-  warn "Schreibe docker-compose.yml (CPU: ${IMAGE}) – GPU nicht verfügbar/erzwungen."
+  info "Verwende CPU-Image: ${IMAGE}"
 fi
 
+info "Schreibe ${COMPOSE_FILE}..."
 sudo tee "${COMPOSE_FILE}" >/dev/null <<YAML
 services:
   localai:
@@ -1026,11 +1245,14 @@ ${GPU_YAML}    ports:
     volumes:
       - ${MODELS_PATH}:/models
 YAML
+success "docker-compose.yml erfolgreich erstellt"
 
 # --------------------------
 # systemd Unit schreiben
 # --------------------------
-log "systemd Unit erstellen: ${SERVICE_NAME}"
+echo ""
+log "==================== systemd Service einrichten ===================="
+info "Erstelle systemd Unit: ${SERVICE_NAME}"
 sudo tee "/etc/systemd/system/${SERVICE_NAME}" >/dev/null <<'UNIT'
 [Unit]
 Description=LocalAI via Docker Compose
@@ -1054,53 +1276,149 @@ TimeoutStartSec=0
 [Install]
 WantedBy=multi-user.target
 UNIT
+success "systemd Unit erstellt"
 
+echo ""
+log "==================== Support-Services konfigurieren ===================="
+info "Konfiguriere Auto-Suspend Service..."
 configure_auto_suspend_service
+info "Konfiguriere Stay-Awake Service..."
 configure_stay_awake_service
+info "Konfiguriere Wake-on-LAN..."
 configure_wol
+info "Speichere Konfigurationsstatus..."
 persist_state
+success "Support-Services konfiguriert"
 
 # --------------------------
 # Start
 # --------------------------
-log "Compose validieren…"
-( cd "${LOCALAI_DIR}" && "${DOCKER_CMD}" compose config >/dev/null )
+echo ""
+log "==================== LocalAI Service starten ===================="
+info "Validiere docker-compose.yml..."
+if ( cd "${LOCALAI_DIR}" && "${DOCKER_CMD}" compose config >/dev/null ); then
+  success "docker-compose.yml ist valide"
+else
+  err "docker-compose.yml ist ungültig!"
+  exit 1
+fi
 
-log "LocalAI Dienst aktivieren & starten…"
+info "Lade systemd-Konfiguration neu..."
 sudo systemctl daemon-reload
-sudo systemctl enable --now "${SERVICE_NAME}"
+
+info "Aktiviere und starte LocalAI Service..."
+info "Dies kann einige Minuten dauern (Docker-Image wird heruntergeladen)..."
+if sudo systemctl enable --now "${SERVICE_NAME}"; then
+  success "LocalAI Service gestartet"
+else
+  err "Fehler beim Starten des LocalAI Service"
+  exit 1
+fi
 
 # --------------------------
 # Post-Checks
 # --------------------------
-log "Status prüfen…"
+echo ""
+log "==================== Installation überprüfen ===================="
+
+info "Service-Status:"
 systemctl --no-pager --full status "${SERVICE_NAME}" || true
 
-log "Docker-Container:"
+echo ""
+info "Docker-Container:"
 "${DOCKER_CMD}" ps || true
 
 # Health-Check (kann anfangs noch 'starting' sein)
-log "Warte kurz auf Health-Endpoint…"
-sleep 3 || true
-if curl -fsS "http://127.0.0.1:${LOCALAI_PORT}/readyz" >/dev/null 2>&1; then
-  log "LocalAI ist bereit: http://${SERVER_IP}:${LOCALAI_PORT}"
-else
-  warn "Health-Endpoint noch nicht bereit. Logs ansehen mit:  ${DOCKER_CMD} logs -f localai"
-fi
+echo ""
+info "Warte auf LocalAI Health-Endpoint (kann bis zu 30 Sekunden dauern)..."
+HEALTH_CHECK_ATTEMPTS=10
+HEALTH_CHECK_DELAY=3
+for i in $(seq 1 ${HEALTH_CHECK_ATTEMPTS}); do
+  if curl -fsS "http://127.0.0.1:${LOCALAI_PORT}/readyz" >/dev/null 2>&1; then
+    success "LocalAI ist bereit und antwortet auf Health-Checks!"
+    break
+  else
+    if [[ $i -eq ${HEALTH_CHECK_ATTEMPTS} ]]; then
+      warn "Health-Endpoint noch nicht bereit nach ${HEALTH_CHECK_ATTEMPTS} Versuchen."
+      warn "Dies ist normal bei der ersten Installation (Image-Download + Start kann lange dauern)."
+      warn "Logs ansehen mit: ${DOCKER_CMD} logs -f localai"
+    else
+      printf "."
+      sleep ${HEALTH_CHECK_DELAY}
+    fi
+  fi
+done
+echo ""
 
-# Hinweis zur Gruppe
-if [[ -n "${SUDO_USER:-}" ]]; then
-  warn "Falls '${SUDO_USER}' neu zur docker-Gruppe hinzugefügt wurde, ist ein Re-Login nötig, damit 'docker' ohne sudo funktioniert."
-fi
+# --------------------------
+# Zusammenfassung
+# --------------------------
+echo ""
+echo "=========================================================================="
+log "                    INSTALLATION ABGESCHLOSSEN!                    "
+echo "=========================================================================="
+echo ""
+success "LocalAI wurde erfolgreich installiert und gestartet!"
+echo ""
+info "📍 Zugriffs-URLs:"
+echo "   • LocalAI WebUI/API: http://${SERVER_IP}:${LOCALAI_PORT}"
+echo "   • Health Check:      http://${SERVER_IP}:${LOCALAI_PORT}/readyz"
+echo "   • Metrics:           http://${SERVER_IP}:${LOCALAI_PORT}/metrics"
+echo ""
 
 if [[ "${ENABLE_STAY_AWAKE}" == "true" ]]; then
-  log "Stay-Awake Endpoint aktiv: http://${SERVER_IP}:${STAY_AWAKE_PORT}/stay?s=3600"
-fi
-if [[ "${ENABLE_AUTO_SUSPEND}" == "true" ]]; then
-  log "Auto-Suspend Watcher überwacht CPU/GPU-Auslastung (Timeout ${WAIT_MINUTES} Min)."
-fi
-if [[ "${ENABLE_WOL}" == "true" && -n "${WOL_INTERFACE}" ]]; then
-  log "Wake-on-LAN aktiviert für Interface ${WOL_INTERFACE}."
+  info "⏰ Stay-Awake Service:"
+  echo "   • Keep-Alive Endpoint: http://${SERVER_IP}:${STAY_AWAKE_PORT}/stay?s=3600"
+  echo "   • Beispiel: curl http://${SERVER_IP}:${STAY_AWAKE_PORT}/stay?s=7200"
+  echo ""
 fi
 
-log "Fertig. Viel Spaß mit LocalAI! 🚀"
+if [[ "${ENABLE_AUTO_SUSPEND}" == "true" ]]; then
+  info "💤 Auto-Suspend:"
+  echo "   • Status: Aktiviert"
+  echo "   • Idle-Timeout: ${WAIT_MINUTES} Minuten"
+  echo "   • CPU Idle-Schwelle: ${CPU_IDLE_THRESHOLD}%"
+  echo "   • GPU Max-Auslastung: ${GPU_USAGE_MAX}%"
+  echo ""
+fi
+
+if [[ "${ENABLE_WOL}" == "true" && -n "${WOL_INTERFACE}" ]]; then
+  info "🌐 Wake-on-LAN:"
+  echo "   • Status: Aktiviert"
+  echo "   • Interface: ${WOL_INTERFACE}"
+  echo ""
+fi
+
+if [[ "${GPU_AVAILABLE}" == "true" ]]; then
+  info "🎮 GPU-Unterstützung:"
+  echo "   • Status: Aktiviert (NVIDIA CUDA)"
+  echo "   • Image: ${IMAGE}"
+  echo ""
+else
+  info "💻 CPU-Modus:"
+  echo "   • Status: Aktiv"
+  echo "   • Image: ${IMAGE}"
+  echo ""
+fi
+
+info "📂 Verzeichnisse:"
+echo "   • LocalAI-Config: ${LOCALAI_DIR}"
+echo "   • Modelle:        ${MODELS_PATH}"
+echo ""
+
+info "🔧 Nützliche Befehle:"
+echo "   • Status anzeigen:     sudo systemctl status ${SERVICE_NAME}"
+echo "   • Logs anzeigen:       ${DOCKER_CMD} logs -f localai"
+echo "   • Service neustarten:  sudo systemctl restart ${SERVICE_NAME}"
+echo "   • Service stoppen:     sudo systemctl stop ${SERVICE_NAME}"
+echo ""
+
+if [[ -n "${SUDO_USER:-}" ]]; then
+  warn "⚠️  WICHTIG: User '${SUDO_USER}' wurde zur docker-Gruppe hinzugefügt."
+  warn "   Bitte neu anmelden (logout/login), damit 'docker' ohne sudo funktioniert!"
+  echo ""
+fi
+
+echo "=========================================================================="
+success "🚀 LocalAI ist jetzt einsatzbereit! Viel Erfolg!"
+echo "=========================================================================="
