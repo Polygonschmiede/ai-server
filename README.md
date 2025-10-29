@@ -61,6 +61,48 @@ Both servers:
   - CPU mode: Any x86_64 system
   - GPU mode: NVIDIA GPU with compatible drivers (optional)
 
+## Getting the Repository
+
+Before you can run the installation scripts, you need to get this repository onto your Linux machine.
+
+### Step 1: Install Git (if not already installed)
+
+On Ubuntu, install Git with:
+```bash
+sudo apt update
+sudo apt install -y git
+```
+
+Verify Git is installed:
+```bash
+git --version
+```
+
+### Step 2: Clone the Repository
+
+Clone this repository to your Linux machine:
+```bash
+git clone https://github.com/Polygonschmiede/ai-server.git
+```
+
+This will create a directory called `ai-server` in your current location.
+
+### Step 3: Navigate to the Repository
+
+Change into the repository directory:
+```bash
+cd ai-server
+```
+
+### Step 4: Make Scripts Executable (optional)
+
+The scripts should already be executable, but if needed:
+```bash
+chmod +x install.sh install-ollama.sh ai-server-manager.sh verify-setup.sh
+```
+
+Now you're ready to proceed with the installation!
+
 ## Quick Start
 
 ### Basic Installation (GPU Mode)
