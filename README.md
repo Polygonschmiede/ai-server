@@ -48,7 +48,9 @@ Both servers:
 - **SystemD Integration**: Service management with automatic restart and health monitoring
 
 ### Power Management
-- **Auto-Suspend**: Monitors CPU/GPU utilization and SSH sessions; suspends system after configurable idle time
+- **Auto-Suspend**: Monitors CPU/GPU utilization; suspends system after 10 minutes idle (configurable)
+- **Smart Idle Detection**: API connections ignored - only CPU/GPU activity prevents suspend
+- **Optional SSH Check**: SSH connections can optionally prevent suspend (disabled by default)
 - **Stay-Awake HTTP Service**: Simple HTTP endpoint to prevent auto-suspend during active workloads
 - **Wake-on-LAN**: Automatic WOL configuration for remote system wake-up
 
@@ -168,10 +170,11 @@ sudo bash install.sh \
 | `--skip-auto-suspend` | Disable auto-suspend watcher | Enabled |
 | `--skip-stay-awake` | Disable stay-awake HTTP service | Enabled |
 | `--skip-wol` | Disable Wake-on-LAN configuration | Enabled |
-| `--wait-minutes MIN` | Idle minutes before suspend | `30` |
+| `--wait-minutes MIN` | Idle minutes before suspend | `10` |
 | `--cpu-idle-threshold %` | CPU idle threshold for suspend | `90` |
 | `--gpu-max %` | Max GPU utilization for idle | `10` |
 | `--check-interval SEC` | Auto-suspend check interval | `60` |
+| `--check-ssh` | SSH connections prevent suspend | `false` |
 | `--stay-awake-port PORT` | HTTP port for stay-awake service | `9876` |
 | `--stay-awake-bind IP` | Bind address for stay-awake | `0.0.0.0` |
 | `--wol-interface IFACE` | Network interface for WOL | Auto-detect |
@@ -324,8 +327,9 @@ sudo bash install.sh --repair
 
 2. **ai-auto-suspend.service**: Monitors system activity
    - Tracks CPU/GPU utilization
-   - Monitors SSH sessions and LLM API ports
-   - Suspends after configured idle time
+   - Ignores API connections (focus on real hardware usage)
+   - Optional SSH session monitoring (disabled by default)
+   - Suspends after 10 minutes idle (configurable)
 
 3. **ai-stayawake-http.service**: Simple HTTP service
    - Endpoint: `GET /stay?s=<seconds>`
