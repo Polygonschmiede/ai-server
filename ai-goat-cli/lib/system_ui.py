@@ -3,6 +3,7 @@ System Management UI Module
 Interactive system management interface
 """
 
+import re
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical, Grid
 from textual.widgets import Button, Static, Label
@@ -17,9 +18,17 @@ class SystemManagementUI(Container):
     status_text = reactive("")
     output_text = reactive("")
 
+    # ANSI escape code pattern
+    ANSI_ESCAPE_PATTERN = re.compile(r'\x1b\[[0-9;]*m')
+
     def __init__(self):
         super().__init__()
         self.system_mgr = SystemManager()
+
+    @staticmethod
+    def strip_ansi_codes(text: str) -> str:
+        """Remove ANSI escape codes from text"""
+        return SystemManagementUI.ANSI_ESCAPE_PATTERN.sub('', text)
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -183,8 +192,11 @@ class SystemManagementUI(Container):
         else:
             result = f"[bold red]✗ {title} - Failed[/bold red]\n\n"
 
-        # Limit output length
-        if len(output) > 1000:
-            output = output[:1000] + "\n\n[dim]... (output truncated)[/dim]"
+        # Strip ANSI escape codes from output
+        clean_output = self.strip_ansi_codes(output)
 
-        widget.update(result + output)
+        # Limit output length
+        if len(clean_output) > 1000:
+            clean_output = clean_output[:1000] + "\n\n[dim]... (output truncated)[/dim]"
+
+        widget.update(result + clean_output)
