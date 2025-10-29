@@ -2,6 +2,17 @@
 
 Automated installation and configuration scripts for AI model servers on Ubuntu 24.04 with NVIDIA GPU support, Docker Compose orchestration, and intelligent power management.
 
+## 📚 Documentation
+
+- **[USAGE.md](USAGE.md)** - 🎯 **Start here!** Complete usage guide with:
+  - How to use the Web UI
+  - Download and switch models
+  - Monitor GPU/CPU status
+  - Auto-suspend and Wake-on-LAN
+  - Daily usage commands
+- **[OLLAMA.md](OLLAMA.md)** - Ollama-specific installation and features
+- **[AGENTS.md](AGENTS.md)** - Development guidelines
+
 ## Available AI Servers
 
 This repository provides installers for two AI server options:
