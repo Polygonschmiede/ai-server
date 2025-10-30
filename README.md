@@ -124,10 +124,67 @@ cd ai-server
 
 The scripts should already be executable, but if needed:
 ```bash
-chmod +x install.sh install-ollama.sh ai-server-manager.sh verify-setup.sh
+chmod +x install.sh install-ollama.sh install-auto-suspend.sh ai-server-manager.sh verify-setup.sh
 ```
 
 Now you're ready to proceed with the installation!
+
+## Installation Scripts
+
+This repository provides three installation scripts for different use cases:
+
+### 1. `install.sh` - Full LocalAI Installation
+
+The main installer that sets up Docker, LocalAI, and all power management features.
+
+**Use this when:**
+- Fresh installation of LocalAI server
+- You want the complete AI server with auto-suspend
+- First-time setup on a new machine
+
+**Includes:**
+- Docker CE and Docker Compose
+- LocalAI with GPU support
+- Auto-suspend monitoring
+- Stay-awake HTTP service
+- Wake-on-LAN configuration
+- Firewall setup
+
+### 2. `install-ollama.sh` - Ollama Installation
+
+Installs Ollama server with Open WebUI. Requires Docker (can use install.sh first).
+
+**Use this when:**
+- You want Ollama instead of or alongside LocalAI
+- Docker is already installed
+- You want the simpler Ollama experience
+
+See [OLLAMA.md](OLLAMA.md) for details.
+
+### 3. `install-auto-suspend.sh` - Standalone Auto-Suspend
+
+Installs **only** the auto-suspend and stay-awake services without LocalAI or Ollama.
+
+**Use this when:**
+- You already have LocalAI/Ollama installed manually
+- You want to add power management to an existing setup
+- You need to reinstall just the auto-suspend component
+- You want power management for other services
+
+**Includes:**
+- Auto-suspend monitor service
+- Stay-awake HTTP server
+- Systemd service files
+- No Docker or AI server installation
+
+**Installation:**
+```bash
+sudo bash install-auto-suspend.sh
+```
+
+The auto-suspend service monitors system activity and suspends after 30 minutes of idle time. Configure it by editing `/etc/systemd/system/ai-auto-suspend.service`.
+
+---
 
 ## Quick Start
 

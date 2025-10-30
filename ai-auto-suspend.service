@@ -14,7 +14,7 @@ WorkingDirectory=/opt/ai-server
 # GPU_USAGE_MAX: GPU usage must be below this %
 # CHECK_INTERVAL: How often to check (in seconds)
 # CHECK_SSH: If true, SSH connections prevent suspend (default: false)
-Environment="WAIT_MINUTES=10"
+Environment="WAIT_MINUTES=30"
 Environment="CPU_IDLE_THRESHOLD=90"
 Environment="GPU_USAGE_MAX=10"
 Environment="CHECK_INTERVAL=60"
