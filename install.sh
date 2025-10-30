@@ -60,6 +60,7 @@ LOCALAI_DIR="/opt/localai"
 COMPOSE_FILE="${LOCALAI_DIR}/docker-compose.yml"
 SERVICE_NAME="localai.service"
 REPAIR_ONLY="false"
+UNINSTALL_ONLY="false"
 EXISTING_INSTALLATION="false"
 EXISTING_COMPONENTS=()
 PERSISTED_DIRECTORIES=()
@@ -96,6 +97,7 @@ while [[ $# -gt 0 ]]; do
     --cpu-only) MODE="cpu"; shift ;;
     --non-interactive) NONINTERACTIVE="true"; shift ;;
     --repair) REPAIR_ONLY="true"; shift ;;
+    --uninstall) UNINSTALL_ONLY="true"; NONINTERACTIVE="true"; shift ;;
     --models-path) MODELS_PATH="${2:?}"; shift 2 ;;
     --timezone) TIMEZONE="${2:?}"; shift 2 ;;
     --localai-port) LOCALAI_PORT="${2:?}"; shift 2 ;;
@@ -117,6 +119,26 @@ while [[ $# -gt 0 ]]; do
     *) die "Unbekanntes Argument: $1" ;;
   esac
 done
+
+# Handle uninstall-only mode
+if [[ "${UNINSTALL_ONLY}" == "true" ]]; then
+  detect_existing_installation
+
+  if [[ "${EXISTING_INSTALLATION}" != "true" ]]; then
+    info "No LocalAI installation found - nothing to uninstall"
+    exit 0
+  fi
+
+  log "==================== Uninstalling LocalAI ===================="
+  info "Found components: ${EXISTING_COMPONENTS[*]}"
+
+  safe_uninstall
+
+  success "LocalAI uninstalled successfully"
+  info "Model data preserved (if any) at: ${MODELS_PATH}"
+  info "To remove models: sudo rm -rf ${MODELS_PATH}"
+  exit 0
+fi
 
 handle_existing_installation
 

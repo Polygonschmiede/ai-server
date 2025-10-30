@@ -110,7 +110,7 @@ docker stats
 ├── localai.service     # LocalAI orchestration
 ├── ollama.service      # Ollama orchestration
 ├── ai-auto-suspend.service      # Auto-suspend monitor
-├── ai-stayawake-http.service    # Stay-awake HTTP service
+├── stay-awake.service           # Stay-awake HTTP service
 └── wol@.service                 # Wake-on-LAN template
 
 scripts/lib/            # Reusable bash helpers
@@ -143,10 +143,10 @@ ai-goat-cli/            # Interactive TUI dashboard
    - Ignores API connection count (focuses on real hardware usage)
    - Optionally monitors SSH sessions (CHECK_SSH environment variable, disabled by default)
    - Respects stay-awake flag from HTTP service
-   - Suspends system after configurable idle time (default: 30 minutes)
+   - Suspends system after configurable idle time (default: 5 minutes)
    - Reads config from environment variables in service unit
 
-3. **ai-stayawake-http.service**: Python HTTP service
+3. **stay-awake.service**: Python HTTP service
    - Endpoint: `GET /stay?s=<seconds>`
    - Writes timestamp to `/run/ai-nodectl/stay_awake_until`
    - Prevents auto-suspend during active workloads
@@ -200,7 +200,7 @@ The auto-suspend system has two components:
 
 **Installation**: Both services are automatically installed by `configure_auto_suspend_service()` and `configure_stay_awake_service()` in `scripts/lib/power.sh`. Python scripts are copied from project root to `/opt/ai-server/`, service files are generated dynamically, and services are enabled/started with `systemctl enable --now`.
 
-**Important**: The system defaults to **NOT** checking SSH connections (CHECK_SSH=false in service environment). API connections (ports 8080, 11434, 3000) are explicitly ignored - only actual hardware usage (CPU/GPU) prevents suspend. Default wait time is 30 minutes, not 10.
+**Important**: The system defaults to **NOT** checking SSH connections (CHECK_SSH=false in service environment). API connections (ports 8080, 11434, 3000) are explicitly ignored - only actual hardware usage (CPU/GPU) prevents suspend. Default wait time is 5 minutes for faster testing.
 
 **Bug Fix (2025-10-30)**: Six critical bugs in auto-suspend mechanism were fixed. See `AUTO_SUSPEND_FIX.md` for details.
 
