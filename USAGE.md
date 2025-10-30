@@ -210,7 +210,7 @@ docker images
 sudo systemctl status localai.service
 sudo systemctl status ollama.service
 sudo systemctl status ai-auto-suspend.service
-sudo systemctl status ai-stayawake-http.service
+sudo systemctl status stay-awake.service
 ```
 
 ---
@@ -484,7 +484,7 @@ docker logs -f localai
 sudo journalctl -u ai-auto-suspend.service -f
 
 # Stay-awake logs
-sudo journalctl -u ai-stayawake-http.service -f
+sudo journalctl -u stay-awake.service -f
 ```
 
 #### View Recent Logs:

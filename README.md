@@ -48,7 +48,7 @@ Both servers:
 - **SystemD Integration**: Service management with automatic restart and health monitoring
 
 ### Power Management
-- **Auto-Suspend**: Monitors CPU/GPU utilization; suspends system after 30 minutes idle (configurable)
+- **Auto-Suspend**: Monitors CPU/GPU utilization; suspends system after 5 minutes idle (configurable)
 - **Smart Idle Detection**: API connections ignored - only CPU/GPU activity prevents suspend
 - **Optional SSH Check**: SSH connections can optionally prevent suspend (disabled by default)
 - **Stay-Awake HTTP Service**: Simple HTTP endpoint to prevent auto-suspend during active workloads
@@ -182,7 +182,7 @@ Installs **only** the auto-suspend and stay-awake services without LocalAI or Ol
 sudo bash install-auto-suspend.sh
 ```
 
-The auto-suspend service monitors system activity and suspends after 30 minutes of idle time. Configure it by editing `/etc/systemd/system/ai-auto-suspend.service`.
+The auto-suspend service monitors system activity and suspends after 5 minutes of idle time (default). Configure it by editing `/etc/systemd/system/ai-auto-suspend.service` or use `--wait-minutes` during installation.
 
 ---
 
@@ -361,14 +361,14 @@ sudo bash install.sh --repair
 ├── docker-compose.yml    # LocalAI container definition
 └── models/               # AI model storage (configurable)
 
-/usr/local/bin/
-├── ai-auto-suspend.sh    # Auto-suspend watcher script
-└── ai-stayawake-http.sh  # Stay-awake HTTP service script
+/opt/ai-server/
+├── auto-suspend-monitor.py   # Auto-suspend monitoring script
+└── stay-awake-server.py      # Stay-awake HTTP service script
 
 /etc/systemd/system/
 ├── localai.service              # Main LocalAI service
 ├── ai-auto-suspend.service      # Auto-suspend watcher
-├── ai-stayawake-http.service    # Stay-awake HTTP service
+├── stay-awake.service           # Stay-awake HTTP service
 └── wol@.service                 # Wake-on-LAN template
 
 /etc/localai-installer/
@@ -386,9 +386,9 @@ sudo bash install.sh --repair
    - Tracks CPU/GPU utilization
    - Ignores API connections (focus on real hardware usage)
    - Optional SSH session monitoring (disabled by default)
-   - Suspends after 30 minutes idle (configurable)
+   - Suspends after 5 minutes idle (configurable)
 
-3. **ai-stayawake-http.service**: Simple HTTP service
+3. **stay-awake.service**: Simple HTTP service
    - Endpoint: `GET /stay?s=<seconds>`
    - Sets temporary stay-awake flag
    - Prevents auto-suspend during active workloads
@@ -456,7 +456,13 @@ cat /run/ai-nodectl/stay_awake_until
 
 ## Uninstallation
 
-The installer detects existing installations and offers safe removal:
+Use the built-in uninstall command:
+```bash
+# Recommended: one-command uninstall
+sudo bash install.sh --uninstall
+```
+
+The installer can also detect existing installations during fresh installs:
 ```bash
 # Interactive uninstall with prompts
 sudo bash install.sh
@@ -465,11 +471,11 @@ sudo bash install.sh
 sudo bash install.sh --non-interactive
 ```
 
-Manual cleanup:
+Manual cleanup (if needed):
 ```bash
 # Stop all services
-sudo systemctl stop localai.service ai-auto-suspend.service ai-stayawake-http.service
-sudo systemctl disable localai.service ai-auto-suspend.service ai-stayawake-http.service
+sudo systemctl stop localai.service ai-auto-suspend.service stay-awake.service
+sudo systemctl disable localai.service ai-auto-suspend.service stay-awake.service
 
 # Remove containers
 cd /opt/localai && docker compose down
@@ -477,15 +483,15 @@ cd /opt/localai && docker compose down
 # Remove service files
 sudo rm -f /etc/systemd/system/localai.service
 sudo rm -f /etc/systemd/system/ai-auto-suspend.service
-sudo rm -f /etc/systemd/system/ai-stayawake-http.service
+sudo rm -f /etc/systemd/system/stay-awake.service
 sudo rm -f /etc/systemd/system/wol@*.service
 
-# Remove scripts
-sudo rm -f /usr/local/bin/ai-auto-suspend.sh
-sudo rm -f /usr/local/bin/ai-stayawake-http.sh
+# Remove Python scripts
+sudo rm -rf /opt/ai-server
 
 # Remove state
 sudo rm -rf /etc/localai-installer
+sudo rm -rf /var/lib/ai-auto-suspend
 
 # Reload systemd
 sudo systemctl daemon-reload
