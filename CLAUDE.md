@@ -183,19 +183,26 @@ ai-goat-cli/            # Interactive TUI dashboard
 
 ### Power Management Design
 The auto-suspend system has two components:
-1. **auto-suspend-monitor.py**: Main monitoring script
-   - Checks CPU idle percentage via `mpstat` or `psutil`
+1. **auto-suspend-monitor.py**: Main monitoring script (installed to `/opt/ai-server/`)
+   - Checks CPU idle percentage via `top` command
    - Checks GPU utilization via `nvidia-smi` (if GPU present)
-   - Checks SSH sessions via `who` (optional, disabled by default)
+   - Checks SSH sessions via `ss -tna` (optional, disabled by default via CHECK_SSH=false)
    - **Ignores** API connections - only CPU/GPU activity matters
    - Suspends via `systemctl suspend` when idle conditions met
+   - Managed by `ai-auto-suspend.service`
 
-2. **stay-awake-server.py**: HTTP flag service
-   - Simple Flask/HTTP server on port 9876 (configurable)
-   - Sets temporary stay-awake flag to prevent suspension
+2. **stay-awake-server.py**: HTTP flag service (installed to `/opt/ai-server/`)
+   - Simple Python HTTP server on port 9876 (configurable via PORT environment variable)
+   - Endpoints: `/stay?s=<seconds>`, `/status`, `/health`
+   - Sets temporary stay-awake flag to prevent suspension (writes to `/run/ai-nodectl/stay_awake_until`)
    - Used before long-running jobs or model downloads
+   - Managed by `stay-awake.service`
 
-**Important**: The system defaults to **NOT** checking SSH connections (set CHECK_SSH=false in service environment). API connections (ports 8080, 11434, 3000) are explicitly ignored - only actual hardware usage (CPU/GPU) prevents suspend. Default wait time is 30 minutes, not 10.
+**Installation**: Both services are automatically installed by `configure_auto_suspend_service()` and `configure_stay_awake_service()` in `scripts/lib/power.sh`. Python scripts are copied from project root to `/opt/ai-server/`, service files are generated dynamically, and services are enabled/started with `systemctl enable --now`.
+
+**Important**: The system defaults to **NOT** checking SSH connections (CHECK_SSH=false in service environment). API connections (ports 8080, 11434, 3000) are explicitly ignored - only actual hardware usage (CPU/GPU) prevents suspend. Default wait time is 30 minutes, not 10.
+
+**Bug Fix (2025-10-30)**: Six critical bugs in auto-suspend mechanism were fixed. See `AUTO_SUSPEND_FIX.md` for details.
 
 ### AI GOAT CLI Architecture
 Python TUI application using Textual framework:

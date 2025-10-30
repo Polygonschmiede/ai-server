@@ -280,10 +280,10 @@ check_support_services() {
   fi
 
   # Check stay-awake
-  if systemctl list-unit-files ai-stayawake-http.service --no-legend 2>/dev/null | grep -q ai-stayawake-http.service; then
+  if systemctl list-unit-files stay-awake.service --no-legend 2>/dev/null | grep -q stay-awake.service; then
     check_pass "Stay-awake HTTP service is installed"
 
-    if systemctl is-active --quiet ai-stayawake-http.service 2>/dev/null; then
+    if systemctl is-active --quiet stay-awake.service 2>/dev/null; then
       check_pass "Stay-awake HTTP service is running"
 
       if curl -fsS "http://127.0.0.1:9876/" >/dev/null 2>&1; then
