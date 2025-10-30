@@ -111,3 +111,144 @@ stop_support_services() {
     done <<<"${wol_units}"
   fi
 }
+
+configure_auto_suspend_service() {
+  if [[ "${ENABLE_AUTO_SUSPEND}" != "true" ]]; then
+    info "Auto-Suspend disabled - skipping"
+    disable_service "${MANAGED_SERVICE_AUTO_SUSPEND}"
+    remove_managed_unit "/etc/systemd/system/${MANAGED_SERVICE_AUTO_SUSPEND}" "Managed by LocalAI Installer"
+    return
+  fi
+
+  info "Installing auto-suspend monitor Python script..."
+
+  # Create installation directory
+  sudo mkdir -p /opt/ai-server
+
+  # Copy Python script to installation directory
+  local script_source="${SCRIPT_DIR}/auto-suspend-monitor.py"
+  if [[ ! -f "${script_source}" ]]; then
+    err "Auto-suspend monitor script not found at ${script_source}"
+    return 1
+  fi
+
+  sudo cp "${script_source}" /opt/ai-server/auto-suspend-monitor.py
+  sudo chmod +x /opt/ai-server/auto-suspend-monitor.py
+
+  info "Creating systemd service ${MANAGED_SERVICE_AUTO_SUSPEND}..."
+  sudo tee "/etc/systemd/system/${MANAGED_SERVICE_AUTO_SUSPEND}" >/dev/null <<SERVICE
+[Unit]
+Description=AI Server Auto-Suspend Monitor
+Documentation=https://github.com/Polygonschmiede/ai-server
+After=network.target ${MANAGED_SERVICE_STAY_AWAKE}
+Wants=${MANAGED_SERVICE_STAY_AWAKE}
+# Managed by LocalAI Installer
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/ai-server
+
+# Configuration via environment variables
+Environment="WAIT_MINUTES=${WAIT_MINUTES}"
+Environment="CPU_IDLE_THRESHOLD=${CPU_IDLE_THRESHOLD}"
+Environment="GPU_USAGE_MAX=${GPU_USAGE_MAX}"
+Environment="CHECK_INTERVAL=${CHECK_INTERVAL}"
+Environment="CHECK_SSH=false"
+
+ExecStart=/usr/bin/python3 /opt/ai-server/auto-suspend-monitor.py
+Restart=always
+RestartSec=10
+
+# Security settings
+PrivateTmp=yes
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/run/ai-nodectl /var/lib/ai-auto-suspend
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ai-auto-suspend
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+
+  info "Enabling Auto-Suspend service..."
+  sudo systemctl daemon-reload
+  if sudo systemctl enable --now "${MANAGED_SERVICE_AUTO_SUSPEND}"; then
+    success "Auto-Suspend service enabled and started"
+  else
+    warn "Error enabling Auto-Suspend service"
+  fi
+}
+
+configure_stay_awake_service() {
+  if [[ "${ENABLE_STAY_AWAKE}" != "true" ]]; then
+    info "Stay-Awake disabled - skipping"
+    disable_service "${MANAGED_SERVICE_STAY_AWAKE}"
+    remove_managed_unit "/etc/systemd/system/${MANAGED_SERVICE_STAY_AWAKE}" "Managed by LocalAI Installer"
+    return
+  fi
+
+  info "Installing stay-awake server Python script..."
+
+  # Create installation directory
+  sudo mkdir -p /opt/ai-server
+
+  # Copy Python script to installation directory
+  local script_source="${SCRIPT_DIR}/stay-awake-server.py"
+  if [[ ! -f "${script_source}" ]]; then
+    err "Stay-awake server script not found at ${script_source}"
+    return 1
+  fi
+
+  sudo cp "${script_source}" /opt/ai-server/stay-awake-server.py
+  sudo chmod +x /opt/ai-server/stay-awake-server.py
+
+  info "Creating systemd service ${MANAGED_SERVICE_STAY_AWAKE}..."
+  sudo tee "/etc/systemd/system/${MANAGED_SERVICE_STAY_AWAKE}" >/dev/null <<SERVICE
+[Unit]
+Description=Stay-Awake HTTP Server
+Documentation=https://github.com/Polygonschmiede/ai-server
+After=network.target
+# Managed by LocalAI Installer
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/ai-server
+
+# Configuration via environment variables
+Environment="PORT=${STAY_AWAKE_PORT}"
+
+ExecStart=/usr/bin/python3 /opt/ai-server/stay-awake-server.py
+Restart=always
+RestartSec=10
+
+# Security settings
+PrivateTmp=yes
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/run/ai-nodectl
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=stay-awake
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+
+  info "Enabling Stay-Awake service..."
+  sudo systemctl daemon-reload
+  if sudo systemctl enable --now "${MANAGED_SERVICE_STAY_AWAKE}"; then
+    success "Stay-Awake service enabled and started"
+  else
+    warn "Error enabling Stay-Awake service"
+  fi
+}

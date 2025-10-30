@@ -18,7 +18,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 STAY_AWAKE_FILE = "/run/ai-nodectl/stay_awake_until"
-PORT = 9876
+PORT = int(os.getenv('PORT', '9876'))
 
 
 class StayAwakeHandler(BaseHTTPRequestHandler):
