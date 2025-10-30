@@ -19,7 +19,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Configuration from environment variables
-WAIT_MINUTES = int(os.getenv('WAIT_MINUTES', '30'))
+WAIT_MINUTES = int(os.getenv('WAIT_MINUTES', '5'))
 CPU_IDLE_THRESHOLD = int(os.getenv('CPU_IDLE_THRESHOLD', '90'))  # CPU must be >90% idle
 GPU_USAGE_MAX = int(os.getenv('GPU_USAGE_MAX', '10'))  # GPU usage must be <10%
 CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL', '60'))  # Check every 60 seconds

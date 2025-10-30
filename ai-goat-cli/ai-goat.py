@@ -135,9 +135,14 @@ class PowerStatus(Static):
             f"[yellow]Conditions:[/yellow]",
             f"  CPU Idle: {'[green]✓[/green]' if status['cpu_idle'] else '[red]✗[/red]'} {status['cpu_idle_percent']:.1f}% (need ≥{status['cpu_threshold']}%)",
             f"  GPU Idle: {'[green]✓[/green]' if status['gpu_idle'] else '[red]✗[/red]'} {status['gpu_util']:.1f}% (need ≤{status['gpu_threshold']}%)",
-            f"  No SSH:   {'[green]✓[/green]' if not status['ssh_active'] else '[red]✗[/red]'}",
-            f"  No API:   {'[green]✓[/green]' if not status['api_active'] else '[red]✗[/red]'}",
         ]
+
+        # Only show SSH check if it's enabled in the configuration
+        if status.get('check_ssh_enabled', False):
+            lines.append(f"  No SSH:   {'[green]✓[/green]' if not status['ssh_active'] else '[red]✗[/red]'}")
+
+        # API check is always shown (for informational purposes, doesn't affect suspend)
+        lines.append(f"  No API:   {'[green]✓[/green]' if not status['api_active'] else '[red]✗[/red]'} [dim](info only)[/dim]")
 
         self.power_text = "\n".join(lines)
 

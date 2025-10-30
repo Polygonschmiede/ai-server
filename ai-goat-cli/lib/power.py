@@ -17,12 +17,13 @@ class PowerManager:
         self.monitor = SystemMonitor()
         self.stay_awake_file = "/run/ai-nodectl/stay_awake_until"
 
-    def _get_auto_suspend_config(self) -> Dict[str, int]:
+    def _get_auto_suspend_config(self) -> Dict[str, Any]:
         """Get auto-suspend configuration"""
         config = {
-            'wait_minutes': 30,
+            'wait_minutes': 5,  # Changed from 30 to 5 minutes
             'cpu_threshold': 90,
             'gpu_threshold': 10,
+            'check_ssh': False,  # Default: SSH checks disabled
         }
 
         try:
@@ -46,6 +47,8 @@ class PowerManager:
                             config['cpu_threshold'] = int(value)
                         elif key == 'GPU_USAGE_MAX':
                             config['gpu_threshold'] = int(value)
+                        elif key == 'CHECK_SSH':
+                            config['check_ssh'] = value.lower() == 'true'
         except Exception:
             pass
 
@@ -140,7 +143,9 @@ class PowerManager:
         cpu_idle_percent = 100 - stats['cpu_percent']
         cpu_idle = cpu_idle_percent >= config['cpu_threshold']
         gpu_idle = stats['gpu_util'] <= config['gpu_threshold']
-        ssh_active = self._check_ssh_active()
+
+        # Only check SSH if enabled in config
+        ssh_active = self._check_ssh_active() if config.get('check_ssh', False) else False
         api_active = self._check_api_active()
 
         # Estimate idle minutes
@@ -163,6 +168,7 @@ class PowerManager:
             'gpu_util': stats['gpu_util'],
             'gpu_threshold': config['gpu_threshold'],
             'ssh_active': ssh_active,
+            'check_ssh_enabled': config.get('check_ssh', False),  # Add this so UI knows whether to show SSH
             'api_active': api_active,
         }
 
