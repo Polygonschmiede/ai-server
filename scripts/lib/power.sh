@@ -27,7 +27,7 @@ detect_wol_interface() {
     WOL_INTERFACE="${detected}"
     return
   fi
-  warn "Konnte Netzwerk-Interface für WOL nicht automatisch bestimmen."
+  warn "Could not automatically detect network interface for WOL."
 }
 
 configure_wol() {
@@ -35,16 +35,16 @@ configure_wol() {
     return
   fi
   if ! command -v ethtool >/dev/null 2>&1; then
-    warn "ethtool nicht verfügbar – WOL-Konfiguration übersprungen."
+    warn "ethtool not available – skipping WOL configuration."
     return
   fi
   detect_wol_interface
   if [[ -z "${WOL_INTERFACE}" ]]; then
-    warn "Kein Interface für WOL angegeben – überspringe."
+    warn "No interface specified for WOL – skipping."
     return
   fi
-  log "Aktiviere Wake-on-LAN für Interface ${WOL_INTERFACE}…"
-  sudo ethtool -s "${WOL_INTERFACE}" wol g || warn "Konnte WOL für ${WOL_INTERFACE} nicht setzen."
+  log "Enabling Wake-on-LAN for interface ${WOL_INTERFACE}…"
+  sudo ethtool -s "${WOL_INTERFACE}" wol g || warn "Could not enable WOL for ${WOL_INTERFACE}."
   if [[ ! -f "${MANAGED_SERVICE_WOL_TEMPLATE}" ]]; then
     sudo tee "${MANAGED_SERVICE_WOL_TEMPLATE}" >/dev/null <<'UNIT'
 [Unit]
@@ -61,7 +61,7 @@ WantedBy=multi-user.target
 UNIT
   fi
   sudo systemctl daemon-reload
-  sudo systemctl enable --now "wol@${WOL_INTERFACE}.service" || warn "Konnte wol@${WOL_INTERFACE}.service nicht aktivieren."
+  sudo systemctl enable --now "wol@${WOL_INTERFACE}.service" || warn "Could not enable wol@${WOL_INTERFACE}.service."
 }
 
 ensure_managed_dir() {

@@ -76,7 +76,7 @@ detect_existing_installation() {
 }
 
 safe_uninstall() {
-  log "Führe saubere Deinstallation der bestehenden Installation durch…"
+  log "Performing clean uninstall of existing installation…"
   stop_support_services
   stop_localai_service
   stop_localai_containers
@@ -123,12 +123,12 @@ handle_existing_installation() {
   detect_existing_installation
 
   if [[ ${#PERSISTED_DIRECTORIES[@]} -gt 0 ]]; then
-    log "Vorhandene Verzeichnisse werden weiterverwendet: $(join_by ', ' "${PERSISTED_DIRECTORIES[@]}")"
+    log "Existing directories will be preserved: $(join_by ', ' "${PERSISTED_DIRECTORIES[@]}")"
   fi
 
   if [[ "${EXISTING_INSTALLATION}" != "true" ]]; then
     if [[ "${REPAIR_ONLY}" == "true" ]]; then
-      warn "Reparaturmodus angefordert, aber keine bestehende Installation gefunden – starte reguläre Installation."
+      warn "Repair mode requested, but no existing installation found – starting regular installation."
       REPAIR_ONLY="false"
     fi
     return
@@ -136,10 +136,10 @@ handle_existing_installation() {
 
   local components
   components="$(join_by ', ' "${EXISTING_COMPONENTS[@]}")"
-  warn "Gefundene LocalAI-Artefakte: ${components}"
+  warn "Found LocalAI artifacts: ${components}"
 
   if [[ "${REPAIR_ONLY}" == "true" ]]; then
-    log "Reparaturmodus aktiv – stoppe Dienst für Neu-Konfiguration."
+    log "Repair mode active – stopping services for reconfiguration."
     stop_support_services
     stop_localai_service
     stop_localai_containers
@@ -147,15 +147,15 @@ handle_existing_installation() {
   fi
 
   if [[ "${NONINTERACTIVE}" == "true" ]]; then
-    log "Nicht-interaktiver Modus: bestehende Installation wird automatisch ersetzt."
+    log "Non-interactive mode: existing installation will be automatically replaced."
     safe_uninstall
     return
   fi
 
-  if prompt_yes_no "Bestehende Installation gefunden (${components}). Saubere Neuinstallation durchführen?"; then
+  if prompt_yes_no "Existing installation found (${components}). Perform clean reinstallation?"; then
     safe_uninstall
   else
-    log "Überspringe Deinstallation – konfiguriere bestehende Installation neu."
+    log "Skipping uninstall – reconfiguring existing installation."
     stop_support_services
     stop_localai_service
     stop_localai_containers

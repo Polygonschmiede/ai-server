@@ -2,7 +2,7 @@
 # System utilities for LocalAI Installer
 
 require_cmd() {
-  command -v "$1" >/dev/null 2>&1 || die "Benötigtes Kommando fehlt: $1"
+  command -v "$1" >/dev/null 2>&1 || die "Required command missing: $1"
 }
 
 join_by() {
@@ -28,7 +28,7 @@ backup_file() {
   stamp="$(date +%Y%m%d%H%M%S)"
   local backup="${target}.${stamp}.bak"
   sudo cp "${target}" "${backup}"
-  log "Backup erstellt: ${backup}"
+  log "Backup created: ${backup}"
 }
 
 prompt_yes_no() {
@@ -49,35 +49,35 @@ ensure_timezone() {
     return
   fi
   if ! command -v timedatectl >/dev/null 2>&1; then
-    warn "timedatectl nicht verfügbar – überspringe Zeitzonen-Setup."
+    warn "timedatectl not available – skipping timezone setup."
     return
   fi
   local current
   current="$(timedatectl show -p Timezone --value 2>/dev/null || true)"
   if [[ "${current}" == "${TIMEZONE}" ]]; then
-    log "Zeitzone bereits auf ${TIMEZONE} gesetzt."
+    log "Timezone already set to ${TIMEZONE}."
     return
   fi
-  log "Setze Zeitzone auf ${TIMEZONE}…"
-  sudo timedatectl set-timezone "${TIMEZONE}" || warn "Zeitzone konnte nicht gesetzt werden."
+  log "Setting timezone to ${TIMEZONE}…"
+  sudo timedatectl set-timezone "${TIMEZONE}" || warn "Could not set timezone."
 }
 
 install_base_packages() {
   local packages=(ufw curl jq git neovim less unzip ca-certificates gnupg lsb-release net-tools iproute2 sysstat netcat-openbsd ethtool)
-  log "Installiere Basis-Pakete…"
+  log "Installing base packages…"
   sudo apt-get install -y "${packages[@]}"
 }
 
 configure_firewall() {
   if [[ "${CONFIGURE_FIREWALL}" != "true" ]]; then
-    warn "Firewall-Konfiguration deaktiviert."
+    warn "Firewall configuration disabled."
     return
   fi
   if ! command -v ufw >/dev/null 2>&1; then
-    warn "ufw nicht verfügbar – Firewall-Konfiguration übersprungen."
+    warn "ufw not available – skipping firewall configuration."
     return
   fi
-  log "Konfiguriere UFW-Firewall…"
+  log "Configuring UFW firewall…"
   local status
   status="$(sudo ufw status | head -n1 || true)"
   sudo ufw allow 22/tcp >/dev/null 2>&1 || true
@@ -88,10 +88,10 @@ configure_firewall() {
   sudo ufw default deny incoming >/dev/null 2>&1 || true
   sudo ufw default allow outgoing >/dev/null 2>&1 || true
   if [[ "${status}" == "Status: active" ]]; then
-    log "UFW war bereits aktiv – Regeln aktualisiert."
+    log "UFW was already active – rules updated."
   else
-    log "Aktiviere UFW…"
-    sudo ufw --force enable >/dev/null 2>&1 || warn "UFW konnte nicht aktiviert werden."
+    log "Enabling UFW…"
+    sudo ufw --force enable >/dev/null 2>&1 || warn "Could not enable UFW."
   fi
 }
 
@@ -101,11 +101,11 @@ maybe_harden_ssh() {
   fi
   if [[ "${SSH_HARDEN}" == "auto" ]]; then
     if [[ "${NONINTERACTIVE}" == "true" ]]; then
-      warn "Nicht-interaktiv: SSH-Hardening wird übersprungen."
+      warn "Non-interactive mode: skipping SSH hardening."
       SSH_HARDEN="false"
       return
     fi
-    if prompt_yes_no "Passwort-basierte SSH-Anmeldung deaktivieren und Root-Login verbieten?"; then
+    if prompt_yes_no "Disable password-based SSH login and forbid root login?"; then
       SSH_HARDEN="true"
     else
       SSH_HARDEN="false"
@@ -117,14 +117,14 @@ maybe_harden_ssh() {
   fi
   local sshd_config="/etc/ssh/sshd_config"
   if [[ ! -f "${sshd_config}" ]]; then
-    warn "sshd_config nicht gefunden – überspringe SSH-Hardening."
+    warn "sshd_config not found – skipping SSH hardening."
     return
   fi
-  log "Härte SSH: Passwort-Login aus, Root-Login verboten."
+  log "Hardening SSH: disabling password login, forbidding root login."
   sudo sed -i 's/^#\?PasswordAuthentication .*/PasswordAuthentication no/' "${sshd_config}"
   sudo sed -i 's/^#\?PermitRootLogin .*/PermitRootLogin no/' "${sshd_config}"
   if ! grep -q '^PubkeyAuthentication yes' "${sshd_config}"; then
     echo "PubkeyAuthentication yes" | sudo tee -a "${sshd_config}" >/dev/null
   fi
-  sudo systemctl reload ssh >/dev/null 2>&1 || sudo systemctl restart ssh >/dev/null 2>&1 || warn "SSH-Dienst konnte nicht neu geladen werden."
+  sudo systemctl reload ssh >/dev/null 2>&1 || sudo systemctl restart ssh >/dev/null 2>&1 || warn "Could not reload SSH service."
 }
