@@ -48,7 +48,7 @@ Both servers:
 - **SystemD Integration**: Service management with automatic restart and health monitoring
 
 ### Power Management
-- **Auto-Suspend**: Monitors CPU/GPU utilization; suspends system after 10 minutes idle (configurable)
+- **Auto-Suspend**: Monitors CPU/GPU utilization; suspends system after 30 minutes idle (configurable)
 - **Smart Idle Detection**: API connections ignored - only CPU/GPU activity prevents suspend
 - **Optional SSH Check**: SSH connections can optionally prevent suspend (disabled by default)
 - **Stay-Awake HTTP Service**: Simple HTTP endpoint to prevent auto-suspend during active workloads
@@ -170,7 +170,7 @@ sudo bash install.sh \
 | `--skip-auto-suspend` | Disable auto-suspend watcher | Enabled |
 | `--skip-stay-awake` | Disable stay-awake HTTP service | Enabled |
 | `--skip-wol` | Disable Wake-on-LAN configuration | Enabled |
-| `--wait-minutes MIN` | Idle minutes before suspend | `10` |
+| `--wait-minutes MIN` | Idle minutes before suspend | `30` |
 | `--cpu-idle-threshold %` | CPU idle threshold for suspend | `90` |
 | `--gpu-max %` | Max GPU utilization for idle | `10` |
 | `--check-interval SEC` | Auto-suspend check interval | `60` |
@@ -329,7 +329,7 @@ sudo bash install.sh --repair
    - Tracks CPU/GPU utilization
    - Ignores API connections (focus on real hardware usage)
    - Optional SSH session monitoring (disabled by default)
-   - Suspends after 10 minutes idle (configurable)
+   - Suspends after 30 minutes idle (configurable)
 
 3. **ai-stayawake-http.service**: Simple HTTP service
    - Endpoint: `GET /stay?s=<seconds>`
