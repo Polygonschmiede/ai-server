@@ -35,17 +35,17 @@ source "${SCRIPT_DIR}/scripts/lib/install_helpers.sh"
 #   --stay-awake-port PORT : HTTP Keep-Alive Port (default: 9876)
 #   --stay-awake-bind IP   : Bind-Adresse für Stay-Awake (default: 0.0.0.0)
 #   --server-ip IP         : Server-IP für Statushinweise (default: 192.168.178.50)
-#   --skip-firewall        : Skips UFW configuration
+#   --skip-firewall        : Überspringt UFW-Konfiguration
 #   --harden-ssh           : Passwort-SSH deaktivieren & Root-Login verbieten
 #   --skip-ssh-hardening   : Erzwingt, dass SSH unverändert bleibt
-#   --skip-auto-suspend    : Skips Auto-Suspend watcher
-#   --skip-stay-awake      : Skips Stay-Awake HTTP service
-#   --skip-wol             : Skips Wake-on-LAN
+#   --skip-auto-suspend    : Überspringt Auto-Suspend-Watcher
+#   --skip-stay-awake      : Überspringt Stay-Awake-HTTP-Service
+#   --skip-wol             : Überspringt Wake-on-LAN
 #   --wol-interface IFACE  : WOL-Interface explizit setzen (default: automatisch)
 #   --wait-minutes MIN     : Idle-Min bis Suspend (default: 30)
 #   --cpu-idle-threshold % : CPU Idle-Schwelle (default: 90)
 #   --gpu-max %            : max. GPU-Utilisation für Idle (default: 10)
-#   --check-interval SEC   : Auto-Suspend check interval (default: 60)
+#   --check-interval SEC   : Prüfintervall Auto-Suspend (default: 60)
 #
 # Nach dem Run: WebUI/HTTP: http://<server>:8080, Health: /health /readyz
 
@@ -127,10 +127,10 @@ handle_existing_installation
 # --------------------------
 clear
 echo "=========================================================================="
-echo "              LocalAI Installer for Ubuntu 24.04 + NVIDIA"
+echo "              LocalAI Installer für Ubuntu 24.04 + NVIDIA"
 echo "=========================================================================="
 echo ""
-info "Configuration:"
+info "Konfiguration:"
 echo "  • Modus: ${MODE}"
 echo "  • LocalAI Port: ${LOCALAI_PORT}"
 echo "  • Modelle-Pfad: ${MODELS_PATH}"
@@ -139,8 +139,8 @@ echo "  • Stay-Awake: ${ENABLE_STAY_AWAKE} (Port ${STAY_AWAKE_PORT})"
 echo "  • Wake-on-LAN: ${ENABLE_WOL}"
 echo "  • Firewall: ${CONFIGURE_FIREWALL}"
 echo ""
-info "The installation will now begin. This may take 5-15 minutes."
-info "You will receive detailed feedback on each step."
+info "Die Installation wird nun gestartet. Dies kann 5-15 Minuten dauern."
+info "Sie erhalten detailliertes Feedback über jeden Schritt."
 echo ""
 sleep 2
 
@@ -148,9 +148,9 @@ sleep 2
 # Checks
 # --------------------------
 log "==================== System-Checks ===================="
-[[ "$(id -u)" -ne 0 ]] && warn "Script not running as root – using sudo for system changes."
+[[ "$(id -u)" -ne 0 ]] && warn "Skript läuft nicht als root – verwende sudo für Systemänderungen."
 
-info "Checking system requirements..."
+info "Prüfe System-Voraussetzungen..."
 require_cmd lsb_release
 DISTRO="$(lsb_release -is || true)"
 CODENAME="$(lsb_release -cs || true)"
@@ -163,7 +163,7 @@ echo "  • Architektur: ${ARCH}"
 echo ""
 
 if [[ "${DISTRO}" != "Ubuntu" ]]; then
-  die "Only Ubuntu is supported (found: ${DISTRO})."
+  die "Nur Ubuntu wird unterstützt (gefunden: ${DISTRO})."
 fi
 
 if [[ "${CODENAME}" != "noble" ]]; then
@@ -187,16 +187,16 @@ info "Aktualisiere Paketlisten..."
 if sudo apt-get update -y; then
   success "Paketlisten aktualisiert"
 else
-  err "Error updating package lists"
+  err "Fehler beim Aktualisieren der Paketlisten"
   exit 1
 fi
 
 echo ""
-log "==================== Installing Base Packages ===================="
+log "==================== Basis-Pakete installieren ===================="
 install_base_packages
 
 echo ""
-log "==================== System Configuration ===================="
+log "==================== System-Konfiguration ===================="
 ensure_timezone
 maybe_harden_ssh
 configure_firewall
@@ -206,19 +206,19 @@ configure_firewall
 # --------------------------
 echo ""
 log "==================== Docker-Repository einrichten ===================="
-info "Creating keyring directory..."
+info "Erstelle Keyring-Verzeichnis..."
 sudo install -m 0755 -d /etc/apt/keyrings
 
 if [[ ! -f /etc/apt/keyrings/docker.gpg ]]; then
-  info "Downloading Docker GPG key..."
+  info "Lade Docker GPG-Schlüssel herunter..."
   if curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg; then
     sudo chmod a+r /etc/apt/keyrings/docker.gpg
-    success "Docker GPG key installed"
+    success "Docker GPG-Schlüssel installiert"
   else
-    die "Error downloading Docker GPG key"
+    die "Fehler beim Herunterladen des Docker GPG-Schlüssels"
   fi
 else
-  success "Docker GPG key already present"
+  success "Docker GPG-Schlüssel bereits vorhanden"
 fi
 
 info "Füge Docker APT-Repository hinzu..."
@@ -227,29 +227,29 @@ https://download.docker.com/linux/ubuntu ${CODENAME} stable" \
 | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
 success "Docker-Repository hinzugefügt"
 
-info "Updating package lists for Docker..."
+info "Aktualisiere Paketlisten für Docker..."
 if sudo apt-get update -y; then
   success "Paketlisten aktualisiert"
 else
-  err "Error updating package lists"
+  err "Fehler beim Aktualisieren der Paketlisten"
   exit 1
 fi
 
 echo ""
-log "==================== Installing Docker CE + Compose ===================="
-info "Installing: docker-ce, docker-ce-cli, containerd.io, docker-buildx-plugin, docker-compose-plugin"
+log "==================== Docker CE + Compose installieren ===================="
+info "Installiere: docker-ce, docker-ce-cli, containerd.io, docker-buildx-plugin, docker-compose-plugin"
 info "Dies kann mehrere Minuten dauern..."
 if sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin; then
-  success "Docker successfully installed"
+  success "Docker erfolgreich installiert"
 else
-  err "Error during Docker installation"
+  err "Fehler bei der Docker-Installation"
   exit 1
 fi
 
-info "Checking Docker installation..."
+info "Prüfe Docker-Installation..."
 DOCKER_CMD="$(docker_bin)"
 if [[ -z "${DOCKER_CMD}" ]]; then
-  die "docker could not be found after installation."
+  die "docker konnte nach der Installation nicht gefunden werden."
 else
   success "Docker-Binary gefunden: ${DOCKER_CMD}"
 fi
@@ -258,23 +258,23 @@ fi
 # Docker-Dienste & Gruppe
 # --------------------------
 echo ""
-log "==================== Enabling Docker Services ===================="
-info "Reloading systemd configuration..."
+log "==================== Docker-Dienste aktivieren ===================="
+info "Lade systemd-Konfiguration neu..."
 sudo systemctl daemon-reload
 
-info "Enabling Docker socket..."
+info "Aktiviere Docker Socket..."
 sudo systemctl unmask docker.socket || true
 if sudo systemctl enable --now docker.socket; then
-  success "Docker socket enabled"
+  success "Docker Socket aktiviert"
 else
-  warn "Error enabling Docker socket"
+  warn "Fehler beim Aktivieren des Docker Socket"
 fi
 
-info "Enabling Docker service..."
+info "Aktiviere Docker Service..."
 if sudo systemctl enable --now docker; then
-  success "Docker service enabled and started"
+  success "Docker Service aktiviert und gestartet"
 else
-  err "Error enabling Docker service"
+  err "Fehler beim Aktivieren des Docker Service"
   exit 1
 fi
 
@@ -283,19 +283,19 @@ if [[ -n "${SUDO_USER:-}" ]]; then
   info "Füge User ${SUDO_USER} zur docker-Gruppe hinzu..."
   if sudo usermod -aG docker "${SUDO_USER}"; then
     success "User ${SUDO_USER} zur docker-Gruppe hinzugefügt"
-    warn "IMPORTANT: ${SUDO_USER} must log out and back in for group changes to take effect!"
+    warn "WICHTIG: ${SUDO_USER} muss sich neu anmelden, damit die Gruppenänderung wirksam wird!"
   else
-    warn "Could not add user to docker group"
+    warn "Konnte User nicht zur docker-Gruppe hinzufügen"
   fi
 else
-  warn "No SUDO_USER set – skipping group change."
+  warn "Kein SUDO_USER gesetzt – Überspringe Gruppenänderung."
 fi
 
 # --------------------------
 # NVIDIA Toolkit (falls GPU)
 # --------------------------
 echo ""
-log "==================== Checking NVIDIA GPU Support ===================="
+log "==================== NVIDIA GPU-Unterstützung prüfen ===================="
 GPU_AVAILABLE="false"
 if [[ "${MODE}" == "gpu" ]]; then
   if command -v nvidia-smi >/dev/null 2>&1; then
@@ -304,16 +304,16 @@ if [[ "${MODE}" == "gpu" ]]; then
     info "GPU-Informationen:"
     nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader 2>/dev/null || true
   else
-    warn "nvidia-smi not found – attempting to install NVIDIA Container Toolkit."
+    warn "nvidia-smi nicht gefunden – versuche NVIDIA Container Toolkit zu installieren."
 
     # Repo einrichten
     if [[ ! -f /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg ]]; then
-      info "Loading NVIDIA Container Toolkit GPG key..."
+      info "Lade NVIDIA Container Toolkit GPG-Schlüssel..."
       if curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
         | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg; then
-        success "NVIDIA GPG key installed"
+        success "NVIDIA GPG-Schlüssel installiert"
       else
-        warn "Error downloading NVIDIA GPG key"
+        warn "Fehler beim Herunterladen des NVIDIA GPG-Schlüssels"
       fi
     fi
 
@@ -326,41 +326,41 @@ if [[ "${MODE}" == "gpu" ]]; then
     info "Aktualisiere Paketlisten..."
     sudo apt-get update -y
 
-    info "Installing NVIDIA Container Toolkit..."
+    info "Installiere NVIDIA Container Toolkit..."
     if sudo apt-get install -y nvidia-container-toolkit; then
-      success "NVIDIA Container Toolkit installed"
+      success "NVIDIA Container Toolkit installiert"
     else
-      warn "Error installing NVIDIA Container Toolkit"
+      warn "Fehler bei der Installation des NVIDIA Container Toolkit"
     fi
 
     # Docker-Runtime konfigurieren
-    info "Configuring Docker for NVIDIA Runtime..."
+    info "Konfiguriere Docker für NVIDIA Runtime..."
     if sudo nvidia-ctk runtime configure --runtime=docker --set-as-default=true; then
-      success "Docker configured for NVIDIA"
+      success "Docker für NVIDIA konfiguriert"
     else
-      warn "Error configuring NVIDIA Runtime"
+      warn "Fehler bei der NVIDIA Runtime-Konfiguration"
     fi
 
-    info "Restarting Docker..."
+    info "Starte Docker neu..."
     if sudo systemctl restart docker; then
-      success "Docker restarted"
+      success "Docker neu gestartet"
     else
-      warn "Error restarting Docker"
+      warn "Fehler beim Neustart von Docker"
     fi
 
     # Finaler Check
     if command -v nvidia-smi >/dev/null 2>&1; then
-      success "nvidia-smi now available - GPU support enabled"
+      success "nvidia-smi jetzt verfügbar - GPU-Unterstützung aktiviert"
       GPU_AVAILABLE="true"
       nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader 2>/dev/null || true
     else
-      warn "nvidia-smi still not available. GPU mode will NOT be enforced."
-      warn "Installation will continue in CPU-only mode."
+      warn "nvidia-smi weiterhin nicht verfügbar. GPU-Modus wird NICHT erzwungen."
+      warn "Installation wird mit CPU-only Modus fortgesetzt."
       GPU_AVAILABLE="false"
     fi
   fi
 else
-  info "CPU-only mode selected - skipping GPU configuration"
+  info "CPU-only Modus gewählt - überspringe GPU-Konfiguration"
 fi
 
 # --------------------------
@@ -368,20 +368,20 @@ fi
 # --------------------------
 echo ""
 log "==================== LocalAI Verzeichnisse anlegen ===================="
-info "Creating directories: ${LOCALAI_DIR} & ${MODELS_PATH}"
+info "Erstelle Verzeichnisse: ${LOCALAI_DIR} & ${MODELS_PATH}"
 if sudo mkdir -p "${LOCALAI_DIR}" "${MODELS_PATH}"; then
   success "Verzeichnisse erfolgreich angelegt"
-  info "  - LocalAI-Configuration: ${LOCALAI_DIR}"
+  info "  - LocalAI-Konfiguration: ${LOCALAI_DIR}"
   info "  - Modelle: ${MODELS_PATH}"
 else
-  die "Error creating directories"
+  die "Fehler beim Anlegen der Verzeichnisse"
 fi
 
 # --------------------------
 # docker-compose.yml schreiben
 # --------------------------
 echo ""
-log "==================== Creating docker-compose.yml ===================="
+log "==================== docker-compose.yml erstellen ===================="
 if [[ "${MODE}" == "gpu" && "${GPU_AVAILABLE}" == "true" ]]; then
   IMAGE="localai/localai:latest-gpu-nvidia-cuda-12"
   GPU_YAML='
@@ -414,14 +414,14 @@ ${GPU_YAML}    ports:
     volumes:
       - ${MODELS_PATH}:/models
 YAML
-success "docker-compose.yml successfully created"
+success "docker-compose.yml erfolgreich erstellt"
 
 # --------------------------
 # systemd Unit schreiben
 # --------------------------
 echo ""
 log "==================== systemd Service einrichten ===================="
-info "Creating systemd unit: ${SERVICE_NAME}"
+info "Erstelle systemd Unit: ${SERVICE_NAME}"
 sudo tee "/etc/systemd/system/${SERVICE_NAME}" >/dev/null <<'UNIT'
 [Unit]
 Description=LocalAI via Docker Compose
@@ -449,13 +449,13 @@ success "systemd Unit erstellt"
 
 echo ""
 log "==================== Support-Services konfigurieren ===================="
-info "Configuring Auto-Suspend service..."
+info "Konfiguriere Auto-Suspend Service..."
 configure_auto_suspend_service
-info "Configuring Stay-Awake service..."
+info "Konfiguriere Stay-Awake Service..."
 configure_stay_awake_service
-info "Configuring Wake-on-LAN..."
+info "Konfiguriere Wake-on-LAN..."
 configure_wol
-info "Saving configuration status..."
+info "Speichere Konfigurationsstatus..."
 persist_state
 success "Support-Services konfiguriert"
 
@@ -472,17 +472,17 @@ else
   exit 1
 fi
 
-info "Reloading systemd configuration..."
+info "Lade systemd-Konfiguration neu..."
 sudo systemctl daemon-reload
 
-info "Enabling LocalAI service..."
+info "Aktiviere LocalAI Service..."
 sudo systemctl enable "${SERVICE_NAME}"
 success "Service aktiviert"
 
 echo ""
-info "Starting LocalAI service..."
+info "Starte LocalAI Service..."
 warn "Docker lädt jetzt das Image herunter - dies kann 5-15 Minuten dauern!"
-info "Bitte warten Sie, während der Download is running..."
+info "Bitte warten Sie, während der Download läuft..."
 echo ""
 
 # Start service in background and monitor progress
@@ -490,11 +490,11 @@ sudo systemctl start "${SERVICE_NAME}" &
 START_PID=$!
 
 # Show progress while service starts
-log "Service starting (PID: $START_PID)..."
+log "Service wird gestartet (PID: $START_PID)..."
 DOTS=0
 SECONDS_WAITED=0
 while kill -0 $START_PID 2>/dev/null; do
-  printf "\r\033[1;36m[⏳] Starting LocalAI service... %ds vergangen\033[0m" $SECONDS_WAITED
+  printf "\r\033[1;36m[⏳] Starte LocalAI Service... %ds vergangen\033[0m" $SECONDS_WAITED
   sleep 2
   SECONDS_WAITED=$((SECONDS_WAITED + 2))
 
@@ -505,7 +505,7 @@ while kill -0 $START_PID 2>/dev/null; do
     if "${DOCKER_CMD}" ps -a --filter "name=localai" --format "table {{.Names}}\t{{.Status}}" 2>/dev/null | grep -q "localai"; then
       "${DOCKER_CMD}" ps -a --filter "name=localai" --format "  Container: {{.Names}} - {{.Status}}" 2>/dev/null || true
     else
-      info "  Container being prepared..."
+      info "  Container wird vorbereitet..."
     fi
   fi
 done
@@ -514,12 +514,12 @@ START_STATUS=$?
 echo ""
 
 if [ $START_STATUS -ne 0 ]; then
-  err "Service startup failed!"
+  err "Service-Start fehlgeschlagen!"
   echo ""
-  warn "Showing service status for error analysis:"
+  warn "Zeige Service-Status zur Fehleranalyse:"
   sudo systemctl status "${SERVICE_NAME}" --no-pager || true
   echo ""
-  warn "Showing container logs for error analysis:"
+  warn "Zeige Container-Logs zur Fehleranalyse:"
   "${DOCKER_CMD}" logs localai 2>&1 | tail -n 30 || true
   exit 1
 fi
@@ -528,7 +528,7 @@ success "systemctl start Befehl abgeschlossen (nach ${SECONDS_WAITED}s)"
 
 # Wait for container to actually start
 echo ""
-info "Waiting for container to start..."
+info "Warte auf Container-Start..."
 WAIT_COUNT=0
 MAX_WAIT=60
 while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
@@ -554,7 +554,7 @@ fi
 # Post-Checks
 # --------------------------
 echo ""
-log "==================== Verifying Installation ===================="
+log "==================== Installation überprüfen ===================="
 
 info "Service-Status:"
 systemctl --no-pager --full status "${SERVICE_NAME}" || true
@@ -575,7 +575,7 @@ for i in $(seq 1 ${HEALTH_CHECK_ATTEMPTS}); do
   else
     if [[ $i -eq ${HEALTH_CHECK_ATTEMPTS} ]]; then
       warn "Health-Endpoint noch nicht bereit nach ${HEALTH_CHECK_ATTEMPTS} Versuchen."
-      warn "This is normal on first installation (image download + startup can take a while)."
+      warn "Dies ist normal bei der ersten Installation (Image-Download + Start kann lange dauern)."
       warn "Logs ansehen mit: ${DOCKER_CMD} logs -f localai"
     else
       printf "."

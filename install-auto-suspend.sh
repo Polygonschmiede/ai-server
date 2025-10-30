@@ -1,5 +1,5 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
 # Colors
 RED='\033[0;31m'
@@ -19,7 +19,7 @@ echo -e "${BLUE}[+]${NC} This will install the auto-suspend system"
 echo ""
 
 # Check if running as root
-if [ "$EUID" -ne 0 ]; then
+if [[ "$EUID" -ne 0 ]]; then
     echo -e "${RED}[!] Please run as root (use sudo)${NC}"
     exit 1
 fi

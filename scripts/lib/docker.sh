@@ -24,7 +24,7 @@ docker_container_exists() {
 
 stop_localai_service() {
   if systemd_unit_exists; then
-    log "Stoppe LocalAI systemd Dienst…"
+    log "Stopping LocalAI systemd service…"
     sudo systemctl stop "${SERVICE_NAME}" >/dev/null 2>&1 || true
   fi
 }
@@ -36,7 +36,7 @@ stop_localai_containers() {
   if ! docker_container_exists; then
     return 0
   fi
-  log "Stoppe LocalAI Container…"
+  log "Stopping LocalAI containers…"
   if [[ -d "${LOCALAI_DIR}" ]]; then
     ( cd "${LOCALAI_DIR}" && "${bin}" compose down --remove-orphans >/dev/null 2>&1 ) || true
   fi

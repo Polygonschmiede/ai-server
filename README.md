@@ -48,7 +48,7 @@ Both servers:
 - **SystemD Integration**: Service management with automatic restart and health monitoring
 
 ### Power Management
-- **Auto-Suspend**: Monitors CPU/GPU utilization; suspends system after 10 minutes idle (configurable)
+- **Auto-Suspend**: Monitors CPU/GPU utilization; suspends system after 30 minutes idle (configurable)
 - **Smart Idle Detection**: API connections ignored - only CPU/GPU activity prevents suspend
 - **Optional SSH Check**: SSH connections can optionally prevent suspend (disabled by default)
 - **Stay-Awake HTTP Service**: Simple HTTP endpoint to prevent auto-suspend during active workloads
@@ -124,10 +124,67 @@ cd ai-server
 
 The scripts should already be executable, but if needed:
 ```bash
-chmod +x install.sh install-ollama.sh ai-server-manager.sh verify-setup.sh
+chmod +x install.sh install-ollama.sh install-auto-suspend.sh ai-server-manager.sh verify-setup.sh
 ```
 
 Now you're ready to proceed with the installation!
+
+## Installation Scripts
+
+This repository provides three installation scripts for different use cases:
+
+### 1. `install.sh` - Full LocalAI Installation
+
+The main installer that sets up Docker, LocalAI, and all power management features.
+
+**Use this when:**
+- Fresh installation of LocalAI server
+- You want the complete AI server with auto-suspend
+- First-time setup on a new machine
+
+**Includes:**
+- Docker CE and Docker Compose
+- LocalAI with GPU support
+- Auto-suspend monitoring
+- Stay-awake HTTP service
+- Wake-on-LAN configuration
+- Firewall setup
+
+### 2. `install-ollama.sh` - Ollama Installation
+
+Installs Ollama server with Open WebUI. Requires Docker (can use install.sh first).
+
+**Use this when:**
+- You want Ollama instead of or alongside LocalAI
+- Docker is already installed
+- You want the simpler Ollama experience
+
+See [OLLAMA.md](OLLAMA.md) for details.
+
+### 3. `install-auto-suspend.sh` - Standalone Auto-Suspend
+
+Installs **only** the auto-suspend and stay-awake services without LocalAI or Ollama.
+
+**Use this when:**
+- You already have LocalAI/Ollama installed manually
+- You want to add power management to an existing setup
+- You need to reinstall just the auto-suspend component
+- You want power management for other services
+
+**Includes:**
+- Auto-suspend monitor service
+- Stay-awake HTTP server
+- Systemd service files
+- No Docker or AI server installation
+
+**Installation:**
+```bash
+sudo bash install-auto-suspend.sh
+```
+
+The auto-suspend service monitors system activity and suspends after 30 minutes of idle time. Configure it by editing `/etc/systemd/system/ai-auto-suspend.service`.
+
+---
 
 ## Quick Start
 
@@ -170,7 +227,7 @@ sudo bash install.sh \
 | `--skip-auto-suspend` | Disable auto-suspend watcher | Enabled |
 | `--skip-stay-awake` | Disable stay-awake HTTP service | Enabled |
 | `--skip-wol` | Disable Wake-on-LAN configuration | Enabled |
-| `--wait-minutes MIN` | Idle minutes before suspend | `10` |
+| `--wait-minutes MIN` | Idle minutes before suspend | `30` |
 | `--cpu-idle-threshold %` | CPU idle threshold for suspend | `90` |
 | `--gpu-max %` | Max GPU utilization for idle | `10` |
 | `--check-interval SEC` | Auto-suspend check interval | `60` |
@@ -329,7 +386,7 @@ sudo bash install.sh --repair
    - Tracks CPU/GPU utilization
    - Ignores API connections (focus on real hardware usage)
    - Optional SSH session monitoring (disabled by default)
-   - Suspends after 10 minutes idle (configurable)
+   - Suspends after 30 minutes idle (configurable)
 
 3. **ai-stayawake-http.service**: Simple HTTP service
    - Endpoint: `GET /stay?s=<seconds>`

@@ -2,16 +2,6 @@
 set -euo pipefail
 
 # --------------------------
-# Source Helper Libraries
-# --------------------------
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-# Source all helper libraries
-source "${SCRIPT_DIR}/scripts/lib/logging.sh"
-source "${SCRIPT_DIR}/scripts/lib/system.sh"
-source "${SCRIPT_DIR}/scripts/lib/service.sh"
-
-# --------------------------
 # Ollama + Open WebUI Installer (Ubuntu 24.04 + NVIDIA)
 # --------------------------
 # Features:
@@ -48,6 +38,203 @@ OLLAMA_PORT="11434"
 WEBUI_PORT="3000"
 CONFIGURE_FIREWALL="true"
 DOCKER_CMD=""
+
+# --------------------------
+# Utils
+# --------------------------
+log() { echo -e "\033[1;32m[+] $*\033[0m"; }
+warn(){ echo -e "\033[1;33m[!] $*\033[0m"; }
+err() { echo -e "\033[1;31m[✗] $*\033[0m" >&2; }
+die() { err "$*"; exit 1; }
+
+require_cmd() { command -v "$1" >/dev/null 2>&1 || die "Required command missing: $1"; }
+
+join_by() {
+  local delimiter="$1"
+  shift
+  if [[ $# -eq 0 ]]; then
+    printf ''
+    return 0
+  fi
+  local first="$1"
+  shift
+  printf '%s' "${first}"
+  local item
+  for item in "$@"; do
+    printf '%s%s' "${delimiter}" "${item}"
+  done
+}
+
+prompt_yes_no() {
+  local prompt="$1"
+  local default="${2:-n}"
+  local response
+  if [[ "${default,,}" == "y" ]]; then
+    read -r -p "${prompt} [Y/n]: " response
+    case "${response,,}" in
+      n|no) return 1 ;;
+      *) return 0 ;;
+    esac
+  else
+    read -r -p "${prompt} [y/N]: " response
+    case "${response,,}" in
+      y|yes) return 0 ;;
+      *) return 1 ;;
+    esac
+  fi
+}
+
+# --------------------------
+# Checks for existing installation
+# --------------------------
+systemd_unit_exists() {
+  [[ -f "/etc/systemd/system/${SERVICE_NAME}" ]]
+}
+
+unit_exists() {
+  local unit="$1"
+  systemctl list-unit-files "${unit}" --no-legend 2>/dev/null | grep -q "${unit}"
+}
+
+docker_container_exists() {
+  local bin
+  bin="$(command -v docker 2>/dev/null || true)"
+  [[ -z "${bin}" ]] && return 1
+  "${bin}" ps -a --format '{{.Names}}' 2>/dev/null | grep -qE '^(ollama|open-webui)$'
+}
+
+stop_service() {
+  local service="$1"
+  if systemctl is-active --quiet "${service}" 2>/dev/null; then
+    sudo systemctl stop "${service}" 2>/dev/null || true
+  fi
+}
+
+disable_service() {
+  local service="$1"
+  if systemctl is-enabled --quiet "${service}" 2>/dev/null; then
+    sudo systemctl disable "${service}" 2>/dev/null || true
+  fi
+}
+
+backup_file() {
+  local file="$1"
+  if [[ -f "${file}" ]]; then
+    local backup="${file}.backup.$(date +%s)"
+    sudo cp "${file}" "${backup}"
+    log "Backup created: ${backup}"
+  fi
+}
+
+stop_ollama_service() {
+  if systemctl list-unit-files "${SERVICE_NAME}" --no-legend 2>/dev/null | grep -q "${SERVICE_NAME}"; then
+    log "Stopping Ollama systemd service..."
+    stop_service "${SERVICE_NAME}"
+  fi
+}
+
+stop_ollama_containers() {
+  local bin
+  bin="$(command -v docker 2>/dev/null || true)"
+  [[ -z "${bin}" ]] && return 0
+  if ! docker_container_exists; then
+    return 0
+  fi
+  log "Stopping Ollama containers..."
+  if [[ -d "${OLLAMA_DIR}" ]]; then
+    ( cd "${OLLAMA_DIR}" && "${bin}" compose down --remove-orphans >/dev/null 2>&1 ) || true
+  fi
+  "${bin}" rm -f ollama open-webui >/dev/null 2>&1 || true
+}
+
+detect_existing_installation() {
+  EXISTING_COMPONENTS=()
+  PERSISTED_DIRECTORIES=()
+  local found="false"
+
+  if [[ -f "${COMPOSE_FILE}" ]]; then
+    EXISTING_COMPONENTS+=("docker-compose.yml")
+    found="true"
+  fi
+
+  if systemd_unit_exists; then
+    EXISTING_COMPONENTS+=("systemd service")
+    found="true"
+  fi
+
+  if docker_container_exists; then
+    EXISTING_COMPONENTS+=("docker containers")
+    found="true"
+  fi
+
+  [[ -d "${OLLAMA_DIR}" ]] && PERSISTED_DIRECTORIES+=("${OLLAMA_DIR}")
+  [[ -d "${MODELS_PATH}" ]] && PERSISTED_DIRECTORIES+=("${MODELS_PATH}")
+  [[ -d "${WEBUI_DATA}" ]] && PERSISTED_DIRECTORIES+=("${WEBUI_DATA}")
+
+  if [[ "${found}" == "true" ]]; then
+    EXISTING_INSTALLATION="true"
+  else
+    EXISTING_INSTALLATION="false"
+  fi
+}
+
+safe_uninstall() {
+  log "Performing clean uninstallation of existing Ollama installation..."
+  stop_ollama_service
+  stop_ollama_containers
+
+  if [[ -f "/etc/systemd/system/${SERVICE_NAME}" ]]; then
+    backup_file "/etc/systemd/system/${SERVICE_NAME}"
+    sudo rm -f "/etc/systemd/system/${SERVICE_NAME}"
+  fi
+
+  if [[ -f "${COMPOSE_FILE}" ]]; then
+    backup_file "${COMPOSE_FILE}"
+    sudo rm -f "${COMPOSE_FILE}"
+  fi
+
+  sudo systemctl disable "${SERVICE_NAME}" >/dev/null 2>&1 || true
+  sudo systemctl daemon-reload
+
+  log "Uninstallation complete. Model data preserved in: ${MODELS_PATH}"
+}
+
+handle_existing_installation() {
+  detect_existing_installation
+
+  if [[ "${EXISTING_INSTALLATION}" != "true" ]]; then
+    if [[ "${REPAIR_ONLY}" == "true" ]]; then
+      warn "Repair mode requested, but no existing installation found - starting regular installation."
+      REPAIR_ONLY="false"
+    fi
+    return
+  fi
+
+  local components
+  components="$(join_by ', ' "${EXISTING_COMPONENTS[@]}")"
+  warn "Found existing Ollama installation: ${components}"
+
+  if [[ "${REPAIR_ONLY}" == "true" ]]; then
+    log "Repair mode active - stopping service for reconfiguration."
+    stop_ollama_service
+    stop_ollama_containers
+    return
+  fi
+
+  if [[ "${NONINTERACTIVE}" == "true" ]]; then
+    log "Non-interactive mode: existing installation will be automatically replaced."
+    safe_uninstall
+    return
+  fi
+
+  if prompt_yes_no "Existing installation found (${components}). Perform clean reinstallation?"; then
+    safe_uninstall
+  else
+    log "Skipping uninstallation - reconfiguring existing installation."
+    stop_ollama_service
+    stop_ollama_containers
+  fi
+}
 
 # --------------------------
 # Argument parsing

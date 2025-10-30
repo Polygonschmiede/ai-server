@@ -163,7 +163,7 @@ echo "  • Architektur: ${ARCH}"
 echo ""
 
 if [[ "${DISTRO}" != "Ubuntu" ]]; then
-  die "Only Ubuntu is supported (found: ${DISTRO})."
+  die "Nur Ubuntu wird unterstützt (gefunden: ${DISTRO})."
 fi
 
 if [[ "${CODENAME}" != "noble" ]]; then
@@ -490,7 +490,7 @@ sudo systemctl start "${SERVICE_NAME}" &
 START_PID=$!
 
 # Show progress while service starts
-log "Service starting (PID: $START_PID)..."
+log "Service wird gestartet (PID: $START_PID)..."
 DOTS=0
 SECONDS_WAITED=0
 while kill -0 $START_PID 2>/dev/null; do
@@ -505,7 +505,7 @@ while kill -0 $START_PID 2>/dev/null; do
     if "${DOCKER_CMD}" ps -a --filter "name=localai" --format "table {{.Names}}\t{{.Status}}" 2>/dev/null | grep -q "localai"; then
       "${DOCKER_CMD}" ps -a --filter "name=localai" --format "  Container: {{.Names}} - {{.Status}}" 2>/dev/null || true
     else
-      info "  Container being prepared..."
+      info "  Container wird vorbereitet..."
     fi
   fi
 done
