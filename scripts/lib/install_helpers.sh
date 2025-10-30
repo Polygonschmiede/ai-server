@@ -21,12 +21,13 @@ detect_existing_installation() {
     found="true"
   fi
 
-  if [[ -f "${MANAGED_SCRIPT_AUTO_SUSPEND}" ]]; then
+  # Check for Python scripts in /opt/ai-server/ (new location)
+  if [[ -f "/opt/ai-server/auto-suspend-monitor.py" ]]; then
     EXISTING_COMPONENTS+=("auto-suspend script")
     found="true"
   fi
 
-  if [[ -f "${MANAGED_SCRIPT_STAY_AWAKE}" ]]; then
+  if [[ -f "/opt/ai-server/stay-awake-server.py" ]]; then
     EXISTING_COMPONENTS+=("stay-awake script")
     found="true"
   fi
@@ -96,8 +97,14 @@ safe_uninstall() {
 
   remove_managed_unit "/etc/systemd/system/${MANAGED_SERVICE_AUTO_SUSPEND}" "Managed by LocalAI Installer"
   remove_managed_unit "/etc/systemd/system/${MANAGED_SERVICE_STAY_AWAKE}" "Managed by LocalAI Installer"
-  remove_managed_file "${MANAGED_SCRIPT_AUTO_SUSPEND}"
-  remove_managed_file "${MANAGED_SCRIPT_STAY_AWAKE}"
+
+  # Remove Python scripts from new location
+  if [[ -f "/opt/ai-server/auto-suspend-monitor.py" ]]; then
+    sudo rm -f "/opt/ai-server/auto-suspend-monitor.py"
+  fi
+  if [[ -f "/opt/ai-server/stay-awake-server.py" ]]; then
+    sudo rm -f "/opt/ai-server/stay-awake-server.py"
+  fi
 
   local wol_units
   wol_units="$(systemctl list-unit-files 'wol@*.service' --no-legend 2>/dev/null | awk '{print $1}')"
